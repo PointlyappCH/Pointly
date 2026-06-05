@@ -6,7 +6,15 @@ export default function AdminProfile() {
   const { profile, company, signOut } = useAuth()
   const [toast, setToast] = useState('')
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
-  const ini = profile?.full_name?.split(' ').map((p,i)=>i<2?p[0]:'').join('').toUpperCase()||''
+  const ini = profile?.full_name?.split(' ').filter((_,i)=>i<2).map(p=>p[0]).join('').toUpperCase()||''
+
+  const shortcuts = [
+    { to:'/admin/today',       icon:'ti-users',          color:'var(--green-bg)',  ic:'var(--green)',  title:"Qui travaille aujourd'hui", sub:'Vue live de l\'équipe' },
+    { to:'/admin/corrections', icon:'ti-pencil',         color:'var(--red-bg)',    ic:'var(--red)',    title:'Corrections d\'heures',     sub:'Corriger les pointages' },
+    { to:'/admin/export',      icon:'ti-file-type-pdf',  color:'var(--red-bg)',    ic:'var(--red)',    title:'Export PDF officiel',       sub:'Feuille d\'heures mensuelle' },
+    { to:'/admin/exchanges',   icon:'ti-arrows-exchange',color:'var(--orange-bg)', ic:'var(--orange)', title:'Échanges d\'horaires',      sub:'Valider les demandes' },
+    { to:'/admin/settings',    icon:'ti-settings',       color:'var(--blue-bg)',   ic:'var(--blue)',   title:'Réglages',                  sub:'Entreprise, postes, couleurs' },
+  ]
 
   return (
     <div className="screen">
@@ -25,48 +33,21 @@ export default function AdminProfile() {
 
         {/* Raccourcis */}
         <div className="card">
-          <div className="card-title">Gestion</div>
-          <Link to="/admin/corrections" style={{textDecoration:'none'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
-              <div style={{width:'38px',height:'38px',borderRadius:'10px',background:'var(--red-bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <i className="ti ti-pencil" style={{fontSize:'18px',color:'var(--red)'}}/>
+          <div className="card-title">Accès rapides</div>
+          {shortcuts.map(s=>(
+            <Link key={s.to} to={s.to} style={{textDecoration:'none'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
+                <div style={{width:'40px',height:'40px',borderRadius:'11px',background:s.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <i className={`ti ${s.icon}`} style={{fontSize:'20px',color:s.ic}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'14px',fontWeight:'700',color:'var(--text)'}}>{s.title}</div>
+                  <div style={{fontSize:'12px',color:'var(--text2)'}}>{s.sub}</div>
+                </div>
+                <i className="ti ti-chevron-right" style={{color:'var(--text3)',fontSize:'18px'}}/>
               </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:'14px',fontWeight:'700'}}>Corrections d'heures</div>
-                <div style={{fontSize:'12px',color:'var(--text2)'}}>Corriger les pointages manquants</div>
-              </div>
-              <i className="ti ti-chevron-right" style={{color:'var(--text3)',fontSize:'18px'}}/>
-            </div>
-          </Link>
-          <Link to="/admin/export" style={{textDecoration:'none'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',cursor:'pointer'}}>
-              <div style={{width:'38px',height:'38px',borderRadius:'10px',background:'var(--red-bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <i className="ti ti-file-type-pdf" style={{fontSize:'18px',color:'var(--red)'}}/>
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:'14px',fontWeight:'700'}}>Export mensuel PDF</div>
-                <div style={{fontSize:'12px',color:'var(--text2)'}}>Feuille officielle d'heures non modifiable</div>
-              </div>
-              <i className="ti ti-chevron-right" style={{color:'var(--text3)',fontSize:'18px'}}/>
-            </div>
-          </Link>
-        </div>
-
-        {/* Infos entreprise */}
-        <div className="card">
-          <div className="card-title">Entreprise</div>
-          <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-            <span style={{fontSize:'13px',color:'var(--text2)'}}>Nom</span>
-            <span style={{fontSize:'13px',fontWeight:'700'}}>{company?.name}</span>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-            <span style={{fontSize:'13px',color:'var(--text2)'}}>Secteur</span>
-            <span style={{fontSize:'13px',fontWeight:'700'}}>{company?.sector||'—'}</span>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0'}}>
-            <span style={{fontSize:'13px',color:'var(--text2)'}}>Pause repas</span>
-            <span style={{fontSize:'13px',fontWeight:'700'}}>{company?.pause_mode==='fixed'?'Fixe 30min':'Gérée par l\'employé'}</span>
-          </div>
+            </Link>
+          ))}
         </div>
 
         {/* Abonnement */}

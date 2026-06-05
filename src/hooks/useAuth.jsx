@@ -10,34 +10,52 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   async function loadProfile(userId) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('*, companies(*)')
-      .eq('id', userId)
-      .single()
-    if (prof) {
-      setProfile(prof)
-      setCompany(prof.companies)
+    if (!userId) return
+    // Retry jusqu'à 3 fois si le profil n'est pas encore créé
+    for (let i = 0; i < 3; i++) {
+      const { data: prof, error } = await supabase
+        .from('profiles')
+        .select('*, companies(*)')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (prof) {
+        setProfile(prof)
+        setCompany(prof.companies || null)
+        return
+      }
+      // Attendre 1 seconde avant de réessayer
+      await new Promise(r => setTimeout(r, 1000))
     }
   }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
-      setLoading(false)
+      if (session?.user) {
+        loadProfile(session.user.id).finally(() => setLoading(false))
+      } else {
+        setLoading(false)
+      }
     })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
-      else { setProfile(null); setCompany(null) }
+      if (session?.user) {
+        await loadProfile(session.user.id)
+      } else {
+        setProfile(null)
+        setCompany(null)
+      }
     })
+
     return () => listener.subscription.unsubscribe()
   }, [])
 
   async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    if (data.user) await loadProfile(data.user.id)
     return data
   }
 
@@ -47,21 +65,18 @@ export function AuthProvider({ children }) {
   }
 
   async function registerCompany({ companyName, fullName, email, password, sector, pauseMode }) {
-    // 1. Créer le compte auth
     const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password })
     if (authErr) throw authErr
 
-    // 2. Créer l'entreprise
     const { data: co, error: coErr } = await supabase
       .from('companies')
       .insert({ name: companyName, sector, pause_mode: pauseMode })
       .select().single()
     if (coErr) throw coErr
 
-    // 3. Créer le profil admin
     const { error: profErr } = await supabase
       .from('profiles')
-      .insert({
+      .upsert({
         id: authData.user.id,
         company_id: co.id,
         full_name: fullName,
@@ -69,6 +84,8 @@ export function AuthProvider({ children }) {
         poste: 'Administrateur',
       })
     if (profErr) throw profErr
+
+    await loadProfile(authData.user.id)
     return authData
   }
 
@@ -79,14 +96,16 @@ export function AuthProvider({ children }) {
       options: { data: { full_name: fullName } }
     })
     if (authErr) throw authErr
+
     const colors = [
       ['#E6F1FB','#185FA5'],['#E1F5EE','#0A5E45'],['#FAEEDA','#7A4500'],
       ['#EEEDFE','#534AB7'],['#FCEBEB','#8B1F1F'],['#FFF0E6','#8B4500'],
     ]
     const c = colors[Math.floor(Math.random() * colors.length)]
+
     const { error: profErr } = await supabase
       .from('profiles')
-      .insert({
+      .upsert({
         id: authData.user.id,
         company_id: company.id,
         full_name: fullName,
@@ -111,12 +130,22 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
+  // Refresh manuel du profil
+  async function refreshProfile() {
+    if (user) await loadProfile(user.id)
+  }
+
+  function mkIni(name=''){const p=name.trim().split(' ');return((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase()}
+  const initials = profile
+    ? mkIni(profile.full_name)
+    : ''
+
   return (
     <AuthContext.Provider value={{
       user, profile, company, loading,
-      signIn, signOut, registerCompany, addEmployee, updateEmployee,
+      signIn, signOut, registerCompany, addEmployee, updateEmployee, refreshProfile,
       isAdmin: profile?.role === 'admin',
-      initials: profile ? (profile.full_name.split(' ').map((p,i)=>i<2?p[0]:'').join('').toUpperCase()) : '',
+      initials,
     }}>
       {children}
     </AuthContext.Provider>
