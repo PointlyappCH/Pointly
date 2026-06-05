@@ -193,6 +193,7 @@ export default function EmpHome() {
         <Link to="/emp/planning" style={{textDecoration:'none',flex:1}}><div className="nav-item"><i className="ti ti-calendar"/>Planning</div></Link>
         <Link to="/emp/dispo" style={{textDecoration:'none',flex:1}}><div className="nav-item"><i className="ti ti-adjustments"/>Dispos</div></Link>
         <Link to="/emp/chat" style={{textDecoration:'none',flex:1}}><div className="nav-item"><i className="ti ti-message-2"/>Chat</div></Link>
+        <Link to="/emp/exchanges" style={{textDecoration:'none',flex:1}}><div className="nav-item"><i className="ti ti-arrows-exchange"/>Échanges</div></Link>
         <Link to="/emp/profile" style={{textDecoration:'none',flex:1}}><div className="nav-item"><i className="ti ti-user-circle"/>Profil</div></Link>
       </div>
 
