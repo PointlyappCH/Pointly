@@ -116,7 +116,7 @@ export default function AdminPlanning() {
             const today = isToday(day)
             const isSel = selectedDay && format(day,'yyyy-MM-dd')===format(selectedDay,'yyyy-MM-dd')
             return (
-              <div key={day.toISOString()} onClick={()=>openDay(day)}
+              <div key={day.toISOString()} onClick={()=>window.location.href='/admin/day?date='+format(day,'yyyy-MM-dd')}
                 style={{minHeight:'48px',borderRadius:'8px',cursor:'pointer',padding:'3px',
                   background:isSel?'var(--blue-bg)':today?'rgba(24,95,165,.08)':note?.color==='red'?'var(--red-bg)':note?'var(--blue-bg)':'transparent',
                   border:`1.5px solid ${isSel?'var(--accent)':today?'var(--blue)':'var(--border)'}`,
@@ -174,7 +174,7 @@ export default function AdminPlanning() {
                 {dayShifts.length===0 && <div style={{fontSize:'12px',color:'var(--text3)'}}>Aucun shift</div>}
               </div>
               <div style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'8px'}}>
-                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>openDay(day)}>
+                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>window.location.href='/admin/day?date='+format(day,'yyyy-MM-dd')}>
                   <i className="ti ti-plus"/>
                 </button>
               </div>

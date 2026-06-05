@@ -5,6 +5,7 @@ import Login              from './pages/Login'
 import Register           from './pages/Register'
 import AdminHome          from './pages/admin/Home'
 import AdminPlanning      from './pages/admin/Planning'
+import AdminDayView       from './pages/admin/DayView'
 import AdminTeam          from './pages/admin/Team'
 import AdminChat          from './pages/admin/Chat'
 import AdminProfile       from './pages/admin/Profile'
@@ -46,6 +47,7 @@ export default function App() {
 
           <Route path="/admin"             element={<ProtectedRoute requireAdmin><AdminHome /></ProtectedRoute>} />
           <Route path="/admin/planning"    element={<ProtectedRoute requireAdmin><AdminPlanning /></ProtectedRoute>} />
+          <Route path="/admin/day"         element={<ProtectedRoute requireAdmin><AdminDayView /></ProtectedRoute>} />
           <Route path="/admin/team"        element={<ProtectedRoute requireAdmin><AdminTeam /></ProtectedRoute>} />
           <Route path="/admin/chat"        element={<ProtectedRoute requireAdmin><AdminChat /></ProtectedRoute>} />
           <Route path="/admin/profile"     element={<ProtectedRoute requireAdmin><AdminProfile /></ProtectedRoute>} />
