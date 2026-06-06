@@ -25,6 +25,7 @@ export default function DayView() {
   const dateParam = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd')
 
   const [shifts,  setShifts]  = useState([])
+  const [isLoaded, setIsLoaded] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [logs,    setLogs]    = useState([])
   const [emps,    setEmps]    = useState([])
@@ -68,6 +69,7 @@ export default function DayView() {
     console.log('DayView shifts loaded:', s?.length, 'shifts for date', dateParam)
     setShifts(s||[]); setLogs(l||[]); setEmps(e||[]); setPostes(p||[])
     setNote(n); setTasks(t||[])
+    setIsLoaded(true)
     const employees = e?.filter(em=>em.role==='employee')||[]
     if (employees.length && !shiftForm.userId)
       setShiftForm(f=>({...f, userId:employees[0].id, poste:employees[0].poste||p?.[0]?.name||''}))
@@ -267,11 +269,19 @@ export default function DayView() {
 
       <div style={{flex:1,overflowY:'auto',paddingBottom:'80px'}}>
 
+        {/* Indicateur chargement */}
+        {!isLoaded && (
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'40px',color:'var(--text3)',gap:'8px'}}>
+            <div className="spinner" style={{width:'20px',height:'20px',borderWidth:'2px'}}/>
+            <span style={{fontSize:'13px'}}>Chargement…</span>
+          </div>
+        )}
+
         {/* ══════ TIMELINE ══════ */}
-        <div style={{display:'flex',height:`${totalH*HOUR_PX}px`,position:'relative',overflow:'hidden'}}>
+        <div style={{display:'flex',height:`${totalH*HOUR_PX}px`,position:'relative'}}>
 
           {/* Colonne heures */}
-          <div style={{width:'46px',flexShrink:0,background:'var(--surface)',borderRight:'1px solid var(--border)',position:'sticky',left:0,zIndex:4}}>
+          <div style={{width:'46px',flexShrink:0,background:'var(--surface)',borderRight:'1px solid var(--border)',zIndex:4}}>
             {HOURS.map(h=>(
               <div key={h} style={{height:`${HOUR_PX}px`,display:'flex',alignItems:'flex-start',justifyContent:'flex-end',paddingRight:'6px',paddingTop:'4px'}}>
                 <span style={{fontSize:'10px',fontWeight:'600',color:h===Math.floor(nowH)&&isCurrentDay?'var(--red)':'var(--text3)',whiteSpace:'nowrap'}}>
@@ -306,8 +316,8 @@ export default function DayView() {
               </div>
             )}
 
-            {/* Message si aucun shift */}
-            {shifts.length===0 && (
+            {/* Message si aucun shift — seulement après chargement */}
+            {isLoaded && shifts.length===0 && (
               <div style={{position:'absolute',top:'30%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center',zIndex:2}}>
                 <i className="ti ti-calendar-off" style={{fontSize:'32px',color:'var(--text3)',display:'block',marginBottom:'8px'}}/>
                 <div style={{fontSize:'13px',color:'var(--text3)'}}>Aucun shift planifié</div>
