@@ -27,8 +27,14 @@ export default function EmpPlanning() {
     else { start=startOfWeek(cursor,{weekStartsOn:1}); end=endOfWeek(cursor,{weekStartsOn:1}) }
     const fmt = d => format(d,'yyyy-MM-dd')
 
-    // Tous les shifts de la période (pour voir qui travaille)
-    const { data: s } = await supabase.from('shifts')
+    // Mes shifts (filtre direct par user_id — le plus fiable)
+    const { data: myS } = await supabase.from('shifts')
+      .select('*, profiles(full_name,color_bg,color_fg,poste)')
+      .eq('user_id', profile.id)
+      .gte('shift_date', fmt(start)).lte('shift_date', fmt(end))
+
+    // Shifts de toute l'équipe (pour voir les collègues)
+    const { data: allS } = await supabase.from('shifts')
       .select('*, profiles(full_name,color_bg,color_fg,poste)')
       .eq('company_id', company.id)
       .gte('shift_date', fmt(start)).lte('shift_date', fmt(end))
@@ -43,7 +49,11 @@ export default function EmpPlanning() {
       .eq('user_id', profile.id)
       .gte('dispo_date', fmt(start)).lte('dispo_date', fmt(end))
 
-    setShifts(s||[])
+    // Fusionner — mes shifts en priorité, puis compléter avec l'équipe
+    const allShiftsMap = {}
+    ;(allS||[]).forEach(s => { allShiftsMap[s.id] = s })
+    ;(myS||[]).forEach(s => { allShiftsMap[s.id] = s }) // override avec mes shifts
+    setShifts(Object.values(allShiftsMap))
     setNotes(n||[])
     setDispos(d||[])
   }
