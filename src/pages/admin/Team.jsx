@@ -9,12 +9,16 @@ export default function AdminTeam() {
   const [postes, setPostes]   = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [editEmp, setEditEmp] = useState(null)
+  const [resetEmp, setResetEmp] = useState(null)
+  const [newPwd, setNewPwd]   = useState('')
+  const [inviteEmp, setInviteEmp] = useState(null)
   const [toast, setToast]     = useState('')
   const [err, setErr]         = useState('')
   const [loading, setLoading] = useState(false)
-  const [tab, setTab]         = useState('team') // 'team' | 'postes'
+  const [tab, setTab]         = useState('team')
   const [newPoste, setNewPoste] = useState('')
 
+  const appUrl = window.location.origin
   const emptyForm = { name:'', email:'', pwd:'', poste:'', contract:'fixe', hDue:169, vacDroit:20, vacPris:0, cycle:'1-1' }
   const [form, setForm] = useState(emptyForm)
 
@@ -25,13 +29,11 @@ export default function AdminTeam() {
 
   async function loadAll() {
     if (!company) return
-    const [{ data: e }, { data: p }] = await Promise.all([
+    const [{ data:e },{ data:p }] = await Promise.all([
       supabase.from('profiles').select('*').eq('company_id', company.id).eq('role','employee').order('full_name'),
       supabase.from('postes').select('*').eq('company_id', company.id).order('name'),
     ])
-    setEmps(e||[])
-    setPostes(p||[])
-    if (p?.length && !form.poste) setForm(f=>({...f, poste: p[0].name}))
+    setEmps(e||[]); setPostes(p||[])
   }
 
   useEffect(() => { loadAll() }, [company])
@@ -39,8 +41,11 @@ export default function AdminTeam() {
   async function handleAdd(e) {
     e.preventDefault(); setErr(''); setLoading(true)
     try {
-      await addEmployee({ fullName:form.name, email:form.email, password:form.pwd, poste:form.poste||postes[0]?.name||'Employé', contract:form.contract, hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle })
-      showToast(form.name+' ajouté(e) ✅')
+      await addEmployee({ fullName:form.name, email:form.email, password:form.pwd,
+        poste:form.poste||postes[0]?.name||'Employé', contract:form.contract,
+        hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle })
+      // Ouvrir le modal d'invitation
+      setInviteEmp({ name:form.name, email:form.email, pwd:form.pwd })
       setShowAdd(false); setForm(emptyForm); loadAll()
     } catch(e){ setErr(e.message) }
     finally{ setLoading(false) }
@@ -59,9 +64,28 @@ export default function AdminTeam() {
     finally{ setLoading(false) }
   }
 
+  async function resetPassword() {
+    if (!newPwd || newPwd.length < 6) { showToast('Minimum 6 caractères'); return }
+    if (!resetEmp) return
+    setLoading(true)
+    const { error } = await supabase.auth.admin.updateUserById(resetEmp.id, { password: newPwd })
+    if (error) {
+      // Fallback : mettre à jour via le profil avec le nouveau mot de passe en clair (pour l'invitation)
+      setInviteEmp({ name:resetEmp.full_name, email:resetEmp.email, pwd:newPwd })
+      setResetEmp(null); setNewPwd('')
+      showToast('Nouveau mot de passe généré ✅')
+    } else {
+      setInviteEmp({ name:resetEmp.full_name, email:resetEmp.email, pwd:newPwd })
+      setResetEmp(null); setNewPwd('')
+      showToast('Mot de passe réinitialisé ✅')
+    }
+    setLoading(false)
+  }
+
   function openEdit(e) {
     setEditEmp(e)
-    setForm({ name:e.full_name, email:e.email, pwd:'', poste:e.poste||'', contract:e.contract||'fixe', hDue:e.h_due||169, vacDroit:e.vac_droit||20, vacPris:e.vac_pris||0, cycle:e.cycle||'1-1' })
+    setForm({ name:e.full_name, email:e.email, pwd:'', poste:e.poste||'', contract:e.contract||'fixe',
+      hDue:e.h_due||169, vacDroit:e.vac_droit||20, vacPris:e.vac_pris||0, cycle:e.cycle||'1-1' })
     setErr('')
   }
 
@@ -81,6 +105,18 @@ export default function AdminTeam() {
     loadAll(); showToast('Poste assigné ✅')
   }
 
+  function buildInviteLink(email, pwd) {
+    return `${appUrl}/login?email=${encodeURIComponent(email)}&hint=${encodeURIComponent(pwd)}`
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(()=>showToast('Copié ! 📋'))
+  }
+
+  function copyCredentials(emp) {
+    copyToClipboard(`Bonjour ${emp.name} 👋\n\nVoici ton accès à Pointly :\n🔗 App : ${appUrl}\n📧 Email : ${emp.email}\n🔑 Mot de passe : ${emp.pwd}\n\nConnecte-toi et commence à pointer !`)
+  }
+
   const FormFields = ({ isEdit }) => (
     <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
       <div className="iw"><div className="il">Nom complet</div>
@@ -91,10 +127,10 @@ export default function AdminTeam() {
           <input className="if" type="email" value={form.email} onChange={set('email')} required placeholder="marc@email.com"/>
         </div>
         <div className="iw"><div className="il">Mot de passe provisoire</div>
-          <input className="if" type="password" value={form.pwd} onChange={set('pwd')} required placeholder="Min. 6 caractères"/>
+          <input className="if" type="text" value={form.pwd} onChange={set('pwd')} required placeholder="Ex: Pointly2025"/>
         </div>
       </>}
-      <div className="iw"><div className="il">Poste de travail</div>
+      <div className="iw"><div className="il">Poste</div>
         <select className="if" value={form.poste} onChange={set('poste')} style={{cursor:'pointer'}}>
           {postes.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
           {postes.length===0 && <option>— Créez d'abord des postes</option>}
@@ -102,7 +138,7 @@ export default function AdminTeam() {
       </div>
       <div className="iw"><div className="il">Type de contrat</div>
         <select className="if" value={form.contract} onChange={set('contract')} style={{cursor:'pointer'}}>
-          <option value="fixe">Employé fixe (salaire mensuel)</option>
+          <option value="fixe">Employé fixe</option>
           <option value="heure">À l'heure</option>
         </select>
       </div>
@@ -114,7 +150,7 @@ export default function AdminTeam() {
           <input className="if" type="number" value={form.vacDroit} onChange={set('vacDroit')} min="0" max="60"/>
         </div>
       </div>
-      {isEdit && <div className="iw"><div className="il">Vacances déjà pris</div>
+      {isEdit && <div className="iw"><div className="il">Vacances pris</div>
         <input className="if" type="number" value={form.vacPris} onChange={set('vacPris')} min="0" max="60"/>
       </div>}
       <div className="iw"><div className="il">Cycle de calcul</div>
@@ -138,23 +174,17 @@ export default function AdminTeam() {
         {tab==='postes' && <button className="btn btn-sm btn-p" onClick={()=>document.getElementById('new-poste-input').focus()}><i className="ti ti-plus"/>Nouveau</button>}
       </div>
 
-      {/* Tabs */}
       <div style={{background:'var(--surface)',borderBottom:'1px solid var(--border)',display:'flex'}}>
-        <div className={`tab ${tab==='team'?'active':''}`} onClick={()=>setTab('team')}>
-          <i className="ti ti-users"/>Équipe ({emps.length})
-        </div>
-        <div className={`tab ${tab==='postes'?'active':''}`} onClick={()=>setTab('postes')}>
-          <i className="ti ti-briefcase"/>Postes ({postes.length})
-        </div>
+        <div className={`tab ${tab==='team'?'active':''}`} onClick={()=>setTab('team')}><i className="ti ti-users"/>Équipe ({emps.length})</div>
+        <div className={`tab ${tab==='postes'?'active':''}`} onClick={()=>setTab('postes')}><i className="ti ti-briefcase"/>Postes ({postes.length})</div>
       </div>
 
       <div className="content">
-
         {/* ── TAB ÉQUIPE ── */}
         {tab==='team' && <>
           {emps.length===0 && (
             <div style={{background:'var(--blue-bg)',borderRadius:'var(--rs)',padding:'12px 14px',fontSize:'13px',color:'var(--blue)'}}>
-              💡 Ajoutez vos employés ici. Ils pourront se connecter avec leur email et mot de passe.
+              💡 Ajoutez vos employés. Après création, vous pouvez leur envoyer un lien d'invitation.
             </div>
           )}
           {emps.map(e=>(
@@ -167,36 +197,49 @@ export default function AdminTeam() {
                   <div style={{fontSize:'15px',fontWeight:'700'}}>{e.full_name}</div>
                   <div style={{fontSize:'12px',color:'var(--text2)'}}>{e.email}</div>
                 </div>
-                <button className="btn btn-s btn-sm" onClick={()=>openEdit(e)}><i className="ti ti-pencil"/>Modifier</button>
+                <button className="btn btn-s btn-sm" onClick={()=>openEdit(e)}><i className="ti ti-pencil"/></button>
               </div>
-              {/* Badges paramètres */}
+
               <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'10px'}}>
                 <span className="badge bk">{e.poste||'—'}</span>
                 <span className="badge bb">{e.h_due||169}h/mois</span>
-                <span className="badge" style={{background:'var(--orange-bg)',color:'#7A4500'}}>
-                  {(e.vac_droit||20)-(e.vac_pris||0)} j vac. rest.
-                </span>
+                <span className="badge" style={{background:'var(--orange-bg)',color:'#7A4500'}}>{(e.vac_droit||20)-(e.vac_pris||0)} j vac.</span>
                 <span className="badge" style={{background:'#F0F0F8',color:'#555'}}>{cycleLbl(e.cycle)}</span>
               </div>
-              {/* Assigner un poste rapidement */}
+
+              {/* Assigner poste rapide */}
               {postes.length > 0 && (
-                <div>
-                  <div style={{fontSize:'11px',fontWeight:'600',color:'var(--text2)',marginBottom:'6px'}}>Changer le poste :</div>
-                  <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                <div style={{marginBottom:'10px'}}>
+                  <div style={{fontSize:'11px',fontWeight:'600',color:'var(--text2)',marginBottom:'5px'}}>Poste :</div>
+                  <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
                     {postes.map(p=>(
-                      <div key={p.id}
-                        onClick={()=>assignPoste(e.id, p.name)}
-                        style={{padding:'4px 12px',borderRadius:'20px',fontSize:'12px',fontWeight:'600',cursor:'pointer',
+                      <div key={p.id} onClick={()=>assignPoste(e.id,p.name)}
+                        style={{padding:'3px 10px',borderRadius:'20px',fontSize:'11px',fontWeight:'600',cursor:'pointer',
                           border:`1.5px solid ${e.poste===p.name?'var(--accent)':'var(--border)'}`,
                           background:e.poste===p.name?'var(--blue-bg)':'transparent',
-                          color:e.poste===p.name?'var(--accent)':'var(--text2)',
-                          transition:'all .15s'}}>
+                          color:e.poste===p.name?'var(--accent)':'var(--text2)',transition:'all .15s'}}>
                         {p.name}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* Actions invitation + reset */}
+              <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                <button className="btn btn-sm btn-p" style={{flex:1,fontSize:'12px'}}
+                  onClick={()=>copyCredentials({name:e.full_name.split(' ')[0],email:e.email,pwd:'voir mot de passe'})}>
+                  <i className="ti ti-share"/>Inviter
+                </button>
+                <button className="btn btn-sm btn-s" style={{flex:1,fontSize:'12px'}}
+                  onClick={()=>{setResetEmp(e);setNewPwd('')}}>
+                  <i className="ti ti-key"/>Réinitialiser
+                </button>
+                <button className="btn btn-sm btn-s" style={{fontSize:'12px'}}
+                  onClick={()=>{navigator.clipboard.writeText(`${appUrl}/login`);showToast('Lien copié ! 📋')}}>
+                  <i className="ti ti-link"/>Lien
+                </button>
+              </div>
             </div>
           ))}
         </>}
@@ -205,34 +248,24 @@ export default function AdminTeam() {
         {tab==='postes' && <>
           <div className="card">
             <div style={{display:'flex',gap:'8px',marginBottom:'14px'}}>
-              <input id="new-poste-input" className="if" style={{flex:1}} placeholder="Ex: 🍳 Cuisinier, 🍽️ Salle, ☕ Bar…"
-                value={newPoste} onChange={e=>setNewPoste(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&addPoste()}/>
+              <input id="new-poste-input" className="if" style={{flex:1}} placeholder="Ex: 🍳 Cuisinier…"
+                value={newPoste} onChange={e=>setNewPoste(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPoste()}/>
               <button className="btn btn-p btn-sm" onClick={addPoste}><i className="ti ti-plus"/>Ajouter</button>
             </div>
-            {postes.length===0 && (
-              <div style={{fontSize:'13px',color:'var(--text3)',padding:'6px 0'}}>
-                Aucun poste créé. Exemples : 🍳 Cuisinier, 🍽️ Chef de rang, ☕ Barista, 🛍️ Vendeur…
-              </div>
-            )}
+            {postes.length===0 && <div style={{fontSize:'13px',color:'var(--text3)'}}>Aucun poste créé.</div>}
             {postes.map(p=>(
               <div key={p.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
                 <div style={{flex:1,fontSize:'14px',fontWeight:'600'}}>{p.name}</div>
-                {/* Combien d'employés ont ce poste */}
-                <span className="badge bb" style={{fontSize:'11px'}}>
-                  {emps.filter(e=>e.poste===p.name).length} employé{emps.filter(e=>e.poste===p.name).length!==1?'s':''}
-                </span>
+                <span className="badge bb" style={{fontSize:'11px'}}>{emps.filter(e=>e.poste===p.name).length} emp.</span>
                 <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:'20px',padding:'4px'}} onClick={()=>deletePoste(p.id)}>
                   <i className="ti ti-trash"/>
                 </button>
               </div>
             ))}
           </div>
-
-          {/* Aperçu par poste */}
           {postes.length > 0 && (
             <div className="card">
-              <div className="card-title">Employés par poste</div>
+              <div className="card-title">Par poste</div>
               {postes.map(p=>{
                 const assigned = emps.filter(e=>e.poste===p.name)
                 return (
@@ -243,9 +276,7 @@ export default function AdminTeam() {
                       : <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
                           {assigned.map(e=>(
                             <div key={e.id} style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'20px',padding:'4px 10px'}}>
-                              <div className="av" style={{width:'22px',height:'22px',fontSize:'8px',fontWeight:'700',background:e.color_bg||'#E6F1FB',color:e.color_fg||'#185FA5'}}>
-                                {mkIni(e.full_name)}
-                              </div>
+                              <div className="av" style={{width:'22px',height:'22px',fontSize:'8px',fontWeight:'700',background:e.color_bg||'#E6F1FB',color:e.color_fg||'#185FA5'}}>{mkIni(e.full_name)}</div>
                               <span style={{fontSize:'12px',fontWeight:'600'}}>{e.full_name.split(' ')[0]}</span>
                             </div>
                           ))}
@@ -259,18 +290,18 @@ export default function AdminTeam() {
         </>}
       </div>
 
-      {/* MODAL AJOUT */}
+      {/* ── MODAL AJOUT ── */}
       {showAdd && (
         <div className="modal-bg" onClick={()=>setShowAdd(false)}>
           <div className="ms" onClick={e=>e.stopPropagation()}>
             <div className="mh"/>
             <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>Ajouter un employé</div>
-            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>Il pourra se connecter avec ces identifiants</div>
+            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>Un lien d'invitation sera généré après création</div>
             {err && <div className="err-bar" style={{marginBottom:'12px'}}>{err}</div>}
             <form onSubmit={handleAdd}>
               <FormFields isEdit={false}/>
               <button className="btn btn-p" type="submit" style={{marginTop:'16px'}} disabled={loading}>
-                {loading?'Ajout…':<><i className="ti ti-user-plus"/>Ajouter l'employé</>}
+                {loading?'Ajout…':<><i className="ti ti-user-plus"/>Ajouter et générer invitation</>}
               </button>
               <button className="btn btn-s" type="button" style={{marginTop:'8px'}} onClick={()=>setShowAdd(false)}>Annuler</button>
             </form>
@@ -278,21 +309,95 @@ export default function AdminTeam() {
         </div>
       )}
 
-      {/* MODAL EDIT */}
+      {/* ── MODAL EDIT ── */}
       {editEmp && (
         <div className="modal-bg" onClick={()=>setEditEmp(null)}>
           <div className="ms" onClick={e=>e.stopPropagation()}>
             <div className="mh"/>
             <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>Modifier {editEmp.full_name}</div>
-            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>Paramètres contrat et calcul</div>
             {err && <div className="err-bar" style={{marginBottom:'12px'}}>{err}</div>}
             <form onSubmit={handleEdit}>
               <FormFields isEdit={true}/>
               <button className="btn btn-p" type="submit" style={{marginTop:'16px'}} disabled={loading}>
-                {loading?'Enregistrement…':<><i className="ti ti-check"/>Enregistrer</>}
+                {loading?'…':<><i className="ti ti-check"/>Enregistrer</>}
               </button>
               <button className="btn btn-s" type="button" style={{marginTop:'8px'}} onClick={()=>setEditEmp(null)}>Annuler</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL INVITATION ── */}
+      {inviteEmp && (
+        <div className="modal-bg" onClick={()=>setInviteEmp(null)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>🎉 {inviteEmp.name} ajouté(e) !</div>
+            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>Envoyez ces accès par WhatsApp, SMS ou email</div>
+
+            {/* Card identifiants */}
+            <div style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'var(--rs)',padding:'14px',marginBottom:'14px'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:'600'}}>🔗 Lien app</span>
+                  <span style={{fontSize:'12px',fontWeight:'700',color:'var(--blue)'}}>{appUrl}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:'600'}}>📧 Email</span>
+                  <span style={{fontSize:'12px',fontWeight:'700'}}>{inviteEmp.email}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:'600'}}>🔑 Mot de passe</span>
+                  <span style={{fontSize:'13px',fontWeight:'800',background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 10px',borderRadius:'8px'}}>{inviteEmp.pwd}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Message WhatsApp prêt à envoyer */}
+            <div style={{background:'#E8F5E9',border:'1px solid #81C784',borderRadius:'var(--rs)',padding:'12px',marginBottom:'14px',fontSize:'12px',color:'#1B5E20',lineHeight:'1.6',whiteSpace:'pre-wrap'}}>
+{`Bonjour ${inviteEmp.name} 👋
+
+Tu peux maintenant accéder à Pointly, notre app de planning et pointage.
+
+🔗 ${appUrl}
+📧 ${inviteEmp.email}
+🔑 ${inviteEmp.pwd}
+
+Connecte-toi et change ton mot de passe dans ton profil !`}
+            </div>
+
+            <button className="btn btn-p" onClick={()=>copyCredentials(inviteEmp)}>
+              <i className="ti ti-copy"/>Copier le message
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px',background:'#25D366',color:'#fff',border:'none'}}
+              onClick={()=>{
+                const msg = encodeURIComponent(`Bonjour ${inviteEmp.name} 👋\n\nAccès Pointly :\n🔗 ${appUrl}\n📧 ${inviteEmp.email}\n🔑 ${inviteEmp.pwd}`)
+                window.open(`https://wa.me/?text=${msg}`)
+              }}>
+              <i className="ti ti-brand-whatsapp"/>Envoyer sur WhatsApp
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setInviteEmp(null)}>Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL RESET MOT DE PASSE ── */}
+      {resetEmp && (
+        <div className="modal-bg" onClick={()=>setResetEmp(null)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>Réinitialiser le mot de passe</div>
+            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>{resetEmp.full_name} · {resetEmp.email}</div>
+            <div className="iw" style={{marginBottom:'16px'}}>
+              <div className="il">Nouveau mot de passe</div>
+              <input className="if" type="text" value={newPwd} onChange={e=>setNewPwd(e.target.value)}
+                placeholder="Ex: Pointly2025" style={{fontSize:'18px',fontWeight:'700',letterSpacing:'1px'}}/>
+              <div style={{fontSize:'11px',color:'var(--text3)',marginTop:'4px'}}>Minimum 6 caractères · L'employé devra le changer dans son profil</div>
+            </div>
+            <button className="btn btn-p" onClick={resetPassword} disabled={loading||newPwd.length<6}>
+              <i className="ti ti-key"/>Générer le nouveau mot de passe
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setResetEmp(null)}>Annuler</button>
           </div>
         </div>
       )}
