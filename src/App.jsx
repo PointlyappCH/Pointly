@@ -16,17 +16,20 @@ import AdminSettings      from './pages/admin/Settings'
 import AdminToday         from './pages/admin/Today'
 import EmpHome            from './pages/employee/Home'
 import EmpPlanning        from './pages/employee/Planning'
+import EmpDayView         from './pages/employee/DayView'
 import EmpDispo           from './pages/employee/Dispo'
 import EmpChat            from './pages/employee/Chat'
 import EmpProfile         from './pages/employee/Profile'
-import EmpDayView       from './pages/employee/DayView'
 import EmpExchanges       from './pages/employee/Exchanges'
 
-function ProtectedRoute({ children, requireAdmin }) {
+function ProtectedRoute({ children, requireAdmin, requireManager }) {
   const { user, profile, loading } = useAuth()
   if (loading) return <div className="loading-screen"><div className="spinner"/></div>
   if (!user)   return <Navigate to="/login" replace />
+  // Admin seulement
   if (requireAdmin && profile?.role !== 'admin') return <Navigate to="/emp" replace />
+  // Admin ou Modérateur
+  if (requireManager && profile?.role !== 'admin' && profile?.role !== 'moderator') return <Navigate to="/emp" replace />
   return children
 }
 
@@ -34,7 +37,8 @@ function RootRedirect() {
   const { user, profile, loading } = useAuth()
   if (loading) return <div className="loading-screen"><div className="spinner"/></div>
   if (!user)   return <Navigate to="/login" replace />
-  return <Navigate to={profile?.role === 'admin' ? '/admin' : '/emp'} replace />
+  if (profile?.role === 'admin' || profile?.role === 'moderator') return <Navigate to="/admin" replace />
+  return <Navigate to="/emp" replace />
 }
 
 export default function App() {
@@ -46,24 +50,28 @@ export default function App() {
           <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          <Route path="/admin"             element={<ProtectedRoute requireAdmin><AdminHome /></ProtectedRoute>} />
-          <Route path="/admin/planning"    element={<ProtectedRoute requireAdmin><AdminPlanning /></ProtectedRoute>} />
-          <Route path="/admin/day"         element={<ProtectedRoute requireAdmin><AdminDayView /></ProtectedRoute>} />
-          <Route path="/admin/team"        element={<ProtectedRoute requireAdmin><AdminTeam /></ProtectedRoute>} />
-          <Route path="/admin/chat"        element={<ProtectedRoute requireAdmin><AdminChat /></ProtectedRoute>} />
-          <Route path="/admin/profile"     element={<ProtectedRoute requireAdmin><AdminProfile /></ProtectedRoute>} />
-          <Route path="/admin/corrections" element={<ProtectedRoute requireAdmin><AdminCorrections /></ProtectedRoute>} />
-          <Route path="/admin/export"      element={<ProtectedRoute requireAdmin><AdminExport /></ProtectedRoute>} />
-          <Route path="/admin/exchanges"   element={<ProtectedRoute requireAdmin><AdminExchanges /></ProtectedRoute>} />
-          <Route path="/admin/settings"    element={<ProtectedRoute requireAdmin><AdminSettings /></ProtectedRoute>} />
-          <Route path="/admin/today"       element={<ProtectedRoute requireAdmin><AdminToday /></ProtectedRoute>} />
+          {/* Admin + Modérateur */}
+          <Route path="/admin"             element={<ProtectedRoute requireManager><AdminHome /></ProtectedRoute>} />
+          <Route path="/admin/planning"    element={<ProtectedRoute requireManager><AdminPlanning /></ProtectedRoute>} />
+          <Route path="/admin/day"         element={<ProtectedRoute requireManager><AdminDayView /></ProtectedRoute>} />
+          <Route path="/admin/team"        element={<ProtectedRoute requireManager><AdminTeam /></ProtectedRoute>} />
+          <Route path="/admin/chat"        element={<ProtectedRoute requireManager><AdminChat /></ProtectedRoute>} />
+          <Route path="/admin/profile"     element={<ProtectedRoute requireManager><AdminProfile /></ProtectedRoute>} />
+          <Route path="/admin/corrections" element={<ProtectedRoute requireManager><AdminCorrections /></ProtectedRoute>} />
+          <Route path="/admin/exchanges"   element={<ProtectedRoute requireManager><AdminExchanges /></ProtectedRoute>} />
+          <Route path="/admin/settings"    element={<ProtectedRoute requireManager><AdminSettings /></ProtectedRoute>} />
+          <Route path="/admin/today"       element={<ProtectedRoute requireManager><AdminToday /></ProtectedRoute>} />
 
+          {/* Admin SEULEMENT — export heures */}
+          <Route path="/admin/export"      element={<ProtectedRoute requireAdmin><AdminExport /></ProtectedRoute>} />
+
+          {/* Employé */}
           <Route path="/emp"              element={<ProtectedRoute><EmpHome /></ProtectedRoute>} />
           <Route path="/emp/planning"     element={<ProtectedRoute><EmpPlanning /></ProtectedRoute>} />
+          <Route path="/emp/day"          element={<ProtectedRoute><EmpDayView /></ProtectedRoute>} />
           <Route path="/emp/dispo"        element={<ProtectedRoute><EmpDispo /></ProtectedRoute>} />
           <Route path="/emp/chat"         element={<ProtectedRoute><EmpChat /></ProtectedRoute>} />
           <Route path="/emp/profile"      element={<ProtectedRoute><EmpProfile /></ProtectedRoute>} />
-          <Route path="/emp/day"         element={<ProtectedRoute><EmpDayView /></ProtectedRoute>} />
           <Route path="/emp/exchanges"    element={<ProtectedRoute><EmpExchanges /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />

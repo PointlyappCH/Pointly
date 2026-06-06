@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import {
@@ -23,6 +23,9 @@ export default function AdminPlanning() {
   const [toast, setToast]     = useState('')
   const [shiftForm, setShiftForm] = useState({ userId:'', poste:'', startTime:'08:00' })
   const [noteForm, setNoteForm]   = useState({ content:'', color:'normal' })
+  const [quickTask, setQuickTask] = useState(null) // { date, empId? }
+  const [taskForm, setTaskForm]   = useState({ userId:'', time:'09:00', title:'', color:'#185FA5' })
+  const navigate = useNavigate()
 
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
   function mkIni(n=''){ const p=n.trim().split(' '); return((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase() }
@@ -309,6 +312,67 @@ export default function AdminPlanning() {
             </div>
             <button className="btn btn-p" onClick={saveNote}><i className="ti ti-check"/>Enregistrer</button>
             <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setModalNote(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal tâche rapide depuis le calendrier */}
+      {quickTask && (
+        <div className="modal-bg" onClick={()=>setQuickTask(null)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>Ajouter une tâche</div>
+            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>
+              {format(quickTask.date,'EEEE d MMMM',{locale:fr})}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+              <div className="iw"><div className="il">Employé</div>
+                <select className="if" value={taskForm.userId}
+                  onChange={e=>setTaskForm(f=>({...f,userId:e.target.value}))}
+                  style={{cursor:'pointer'}}>
+                  {emps.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
+                  {emps.length===0 && <option>Aucun employé</option>}
+                </select>
+              </div>
+              <div className="iw"><div className="il">Heure</div>
+                <input className="if" type="time" value={taskForm.time}
+                  onChange={e=>setTaskForm(f=>({...f,time:e.target.value}))}
+                  style={{fontSize:'18px',fontWeight:'700',textAlign:'center'}}/>
+              </div>
+              <div className="iw"><div className="il">Tâche</div>
+                <input className="if" value={taskForm.title}
+                  onChange={e=>setTaskForm(f=>({...f,title:e.target.value}))}
+                  placeholder="Ex: Réception livraison, Réunion équipe…"/>
+              </div>
+              <div className="iw"><div className="il">Couleur</div>
+                <div style={{display:'flex',gap:'10px',marginTop:'4px'}}>
+                  {['#185FA5','#0A5E45','#7A4500','#534AB7','#8B1F1F'].map(c=>(
+                    <div key={c} onClick={()=>setTaskForm(f=>({...f,color:c}))}
+                      style={{width:'34px',height:'34px',borderRadius:'50%',background:c,cursor:'pointer',
+                        border:`3px solid ${taskForm.color===c?'white':'transparent'}`,
+                        boxShadow:taskForm.color===c?`0 0 0 2px ${c}`:'none',transition:'all .15s'}}/>
+                  ))}
+                </div>
+              </div>
+              {/* Aperçu */}
+              {taskForm.title && (
+                <div style={{background:`${taskForm.color}15`,border:`2px solid ${taskForm.color}`,borderRadius:'10px',padding:'10px 14px',display:'flex',alignItems:'center',gap:'8px'}}>
+                  <div style={{width:'8px',height:'8px',borderRadius:'50%',background:taskForm.color,flexShrink:0}}/>
+                  <span style={{fontSize:'13px',fontWeight:'700',color:taskForm.color}}>{taskForm.time} — {taskForm.title}</span>
+                </div>
+              )}
+            </div>
+            <div style={{display:'flex',gap:'8px',marginTop:'16px'}}>
+              <button className="btn btn-p" style={{flex:1}} onClick={saveQuickTask}
+                disabled={!taskForm.title.trim()||emps.length===0}>
+                <i className="ti ti-check"/>Ajouter la tâche
+              </button>
+              <button className="btn btn-s btn-sm"
+                onClick={()=>navigate(`/admin/day?date=${format(quickTask.date,'yyyy-MM-dd')}`)}>
+                <i className="ti ti-calendar-event"/>Vue jour
+              </button>
+            </div>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setQuickTask(null)}>Annuler</button>
           </div>
         </div>
       )}

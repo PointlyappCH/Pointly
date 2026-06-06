@@ -19,7 +19,7 @@ export default function AdminTeam() {
   const [newPoste, setNewPoste] = useState('')
 
   const appUrl = window.location.origin
-  const emptyForm = { name:'', email:'', pwd:'', poste:'', contract:'fixe', hDue:169, vacDroit:20, vacPris:0, cycle:'1-1' }
+  const emptyForm = { name:'', email:'', pwd:'', poste:'', contract:'fixe', hDue:169, vacDroit:20, vacPris:0, cycle:'1-1', role:'employee' }
   const [form, setForm] = useState(emptyForm)
 
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
@@ -43,7 +43,7 @@ export default function AdminTeam() {
     try {
       await addEmployee({ fullName:form.name, email:form.email, password:form.pwd,
         poste:form.poste||postes[0]?.name||'Employé', contract:form.contract,
-        hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle })
+        hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle, role:form.role||'employee' })
       // Ouvrir le modal d'invitation
       setInviteEmp({ name:form.name, email:form.email, pwd:form.pwd })
       setShowAdd(false); setForm(emptyForm); loadAll()
@@ -122,12 +122,17 @@ export default function AdminTeam() {
       <div className="iw"><div className="il">Nom complet</div>
         <input className="if" value={form.name} onChange={set('name')} required placeholder="Marc Lacroix"/>
       </div>
-      {!isEdit && <>
-        <div className="iw"><div className="il">Email</div>
+      {!isEdit && <>\n        <div className="iw"><div className="il">Email</div>
           <input className="if" type="email" value={form.email} onChange={set('email')} required placeholder="marc@email.com"/>
         </div>
         <div className="iw"><div className="il">Mot de passe provisoire</div>
           <input className="if" type="text" value={form.pwd} onChange={set('pwd')} required placeholder="Ex: Pointly2025"/>
+        </div>
+        <div className="iw"><div className="il">Rôle</div>
+          <select className="if" value={form.role||'employee'} onChange={set('role')} style={{cursor:'pointer'}}>
+            <option value="employee">Employé</option>
+            <option value="moderator">Modérateur — accès planning + équipe, sans export heures</option>
+          </select>
         </div>
       </>}
       <div className="iw"><div className="il">Poste</div>
