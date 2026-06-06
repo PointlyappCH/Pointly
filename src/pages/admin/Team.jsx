@@ -10,6 +10,7 @@ export default function AdminTeam() {
   const [showAdd, setShowAdd] = useState(false)
   const [editEmp, setEditEmp] = useState(null)
   const [resetEmp, setResetEmp] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [newPwd, setNewPwd]   = useState('')
   const [inviteEmp, setInviteEmp] = useState(null)
   const [toast, setToast]     = useState('')
@@ -87,6 +88,32 @@ export default function AdminTeam() {
     setForm({ name:e.full_name, email:e.email, pwd:'', poste:e.poste||'', contract:e.contract||'fixe',
       hDue:e.h_due||169, vacDroit:e.vac_droit||20, vacPris:e.vac_pris||0, cycle:e.cycle||'1-1' })
     setErr('')
+  }
+
+  async function deleteEmployee() {
+    if (!confirmDelete) return
+    setLoading(true)
+    const uid = confirmDelete.id
+    try {
+      // Supprimer toutes les données liées
+      await Promise.all([
+        supabase.from('shifts').delete().eq('user_id', uid),
+        supabase.from('time_logs').delete().eq('user_id', uid),
+        supabase.from('dispos').delete().eq('user_id', uid),
+        supabase.from('shift_tasks').delete().eq('user_id', uid),
+        supabase.from('exchanges').delete().eq('requester_id', uid),
+        supabase.from('exchanges').delete().eq('target_id', uid),
+        supabase.from('chat_messages').delete().eq('user_id', uid),
+      ])
+      // Supprimer le profil
+      await supabase.from('profiles').delete().eq('id', uid)
+      setConfirmDelete(null)
+      loadAll()
+      showToast(confirmDelete.full_name+' supprimé ✅')
+    } catch(e) {
+      showToast('Erreur : '+e.message)
+    }
+    setLoading(false)
   }
 
   async function addPoste() {
@@ -230,7 +257,7 @@ export default function AdminTeam() {
                 </div>
               )}
 
-              {/* Actions invitation + reset */}
+              {/* Actions invitation + reset + supprimer */}
               <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
                 <button className="btn btn-sm btn-p" style={{flex:1,fontSize:'12px'}}
                   onClick={()=>copyCredentials({name:e.full_name.split(' ')[0],email:e.email,pwd:'voir mot de passe'})}>
@@ -243,6 +270,10 @@ export default function AdminTeam() {
                 <button className="btn btn-sm btn-s" style={{fontSize:'12px'}}
                   onClick={()=>{navigator.clipboard.writeText(`${appUrl}/login`);showToast('Lien copié ! 📋')}}>
                   <i className="ti ti-link"/>Lien
+                </button>
+                <button className="btn btn-sm btn-s" style={{fontSize:'12px',color:'var(--red)',borderColor:'var(--red-bg)'}}
+                  onClick={()=>setConfirmDelete(e)}>
+                  <i className="ti ti-trash"/>
                 </button>
               </div>
             </div>
@@ -403,6 +434,36 @@ Connecte-toi et change ton mot de passe dans ton profil !`}
               <i className="ti ti-key"/>Générer le nouveau mot de passe
             </button>
             <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setResetEmp(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL SUPPRESSION ── */}
+      {confirmDelete && (
+        <div className="modal-bg" onClick={()=>setConfirmDelete(null)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{textAlign:'center',padding:'8px 0 16px'}}>
+              <div style={{width:'56px',height:'56px',borderRadius:'50%',background:'var(--red-bg)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
+                <i className="ti ti-trash" style={{fontSize:'26px',color:'var(--red)'}}/>
+              </div>
+              <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'6px'}}>
+                Supprimer {confirmDelete.full_name} ?
+              </div>
+              <div style={{fontSize:'13px',color:'var(--text2)',lineHeight:'1.6'}}>
+                Cette action est <strong>irréversible</strong>.<br/>
+                Tous ses shifts, pointages et données seront supprimés.
+              </div>
+            </div>
+            <div style={{background:'var(--red-bg)',border:'1px solid var(--red)',borderRadius:'var(--rs)',padding:'10px 14px',fontSize:'12px',color:'#8B1F1F',marginBottom:'16px'}}>
+              ⚠️ Note : Le compte de connexion reste dans Supabase Auth. Pour le supprimer complètement, allez dans Supabase → Authentication → Users.
+            </div>
+            <button className="btn btn-r" onClick={deleteEmployee} disabled={loading}>
+              {loading ? 'Suppression…' : <><i className="ti ti-trash"/>Oui, supprimer définitivement</>}
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setConfirmDelete(null)}>
+              Annuler
+            </button>
           </div>
         </div>
       )}
