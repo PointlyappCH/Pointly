@@ -295,114 +295,220 @@ export default function DayView() {
               </div>
             )}
 
-            {/* Message si aucun employé */}
-            {employees.length===0 && (
-              <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center',zIndex:2}}>
-                <i className="ti ti-users" style={{fontSize:'32px',color:'var(--text3)',display:'block',marginBottom:'8px'}}/>
-                <div style={{fontSize:'13px',color:'var(--text3)'}}>Aucun employé</div>
-                <Link to="/admin/team" style={{color:'var(--accent)',fontSize:'13px'}}>Ajouter →</Link>
+            {/* Message si aucun shift */}
+            {shifts.length===0 && (
+              <div style={{position:'absolute',top:'30%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center',zIndex:2}}>
+                <i className="ti ti-calendar-off" style={{fontSize:'32px',color:'var(--text3)',display:'block',marginBottom:'8px'}}/>
+                <div style={{fontSize:'13px',color:'var(--text3)'}}>Aucun shift planifié</div>
+                <button className="btn btn-p btn-sm" style={{marginTop:'10px'}} onClick={()=>openShiftModal(null)}>
+                  <i className="ti ti-plus"/>Ajouter
+                </button>
               </div>
             )}
 
-            {/* ── Colonnes par employé ── */}
-            {employees.length > 0 && (() => {
-              const colW = 100 / employees.length
-              return employees.map((emp, ei) => {
-                const shift  = shifts.find(s=>s.user_id===emp.id)
-                const status = logStatus(emp.id)
-                const color  = shift ? (pColorMap[shift.poste]||'var(--accent)') : '#CCCCCC'
-                const empTasks = tasks.filter(t=>t.user_id===emp.id)
+            {/* ── BLOCS SHIFTS style Google Agenda ── */}
+            {(() => {
+              // Distribuer les shifts en colonnes pour éviter chevauchements
+              const cols = []
+              const sortedShifts = [...shifts].sort((a,b) => {
+                const aH = timeToH(a.start_time?.slice(0,5)) || 0
+                const bH = timeToH(b.start_time?.slice(0,5)) || 0
+                return aH - bH
+              })
+              sortedShifts.forEach(s => {
+                const startH = timeToH(s.start_time?.slice(0,5)) || HOUR_START
+                const dur    = Math.max(0.5, shiftDur(s))
+                const endH   = startH + dur
+                let placed   = false
+                for (let c = 0; c < cols.length; c++) {
+                  const last = cols[c][cols[c].length-1]
+                  const lastEnd = (timeToH(last.start_time?.slice(0,5))||HOUR_START) + Math.max(0.5, shiftDur(last))
+                  if (startH >= lastEnd - 0.1) { cols[c].push(s); placed=true; break }
+                }
+                if (!placed) cols.push([s])
+              })
 
-                const startH = shift ? (timeToH(shift.start_time?.slice(0,5))||8) : null
-                const dur    = shift ? Math.max(0.5, shiftDur(shift)) : null
-                const endH   = startH !== null ? startH + dur : null
-                const top    = startH !== null ? hToY(Math.max(startH, HOUR_START)) : null
-                const height = startH !== null ? hToY(Math.min(endH, HOUR_END+1)) - top : null
-                const pct    = shift ? progressPct(shift) : 0
+              const totalCols = Math.max(1, cols.length)
+
+              return cols.map((col, ci) => col.map(s => {
+                const emp    = emps.find(e=>e.id===s.user_id)
+                const status = logStatus(s.user_id)
+                const color  = pColorMap[s.poste] || emp?.color_fg || 'var(--accent)'
+                const colorBg = emp?.color_bg || '#E6F1FB'
+                const startH = timeToH(s.start_time?.slice(0,5)) || HOUR_START
+                const dur    = Math.max(0.5, shiftDur(s))
+                const endH   = startH + dur
+                const top    = hToY(Math.max(startH, HOUR_START))
+                const height = Math.max(hToY(Math.min(endH, HOUR_END+1)) - top, 28)
+                const pct    = progressPct(s)
+
+                // Initiales style JUF
+                const ini = emp ? (() => {
+                  const p = emp.full_name.trim().split(' ')
+                  return ((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase()
+                })() : '?'
+
+                const left  = `${(ci / totalCols) * 100}%`
+                const width = `calc(${100/totalCols}% - 6px)`
 
                 return (
-                  <div key={emp.id} style={{position:'absolute',left:`${ei*colW}%`,width:`${colW}%`,top:0,bottom:0,borderRight:'1px solid var(--border)'}}>
+                  <div key={s.id}
+                    onClick={()=>openShiftModal(emp)}
+                    style={{
+                      position:'absolute',
+                      top:`${top}px`,
+                      left,
+                      width,
+                      height:`${height}px`,
+                      borderRadius:'10px',
+                      overflow:'hidden',
+                      cursor:'pointer',
+                      zIndex:3,
+                      background:`${color}15`,
+                      border:`2px solid ${color}`,
+                      boxShadow:`0 2px 8px ${color}30`,
+                      transition:'box-shadow .15s, transform .15s',
+                    }}
+                    onMouseEnter={e=>e.currentTarget.style.transform='scale(1.01)'}
+                    onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
+                  >
+                    {/* Barre de progression réelle (temps pointé) */}
+                    {pct > 0 && (
+                      <div style={{
+                        position:'absolute',top:0,left:0,
+                        width:'100%',height:`${pct}%`,
+                        background:`${color}35`,
+                        borderBottom:`2px solid ${color}`,
+                        zIndex:1,transition:'height 1s ease'
+                      }}/>
+                    )}
 
-                    {/* En-tête employé sticky en haut */}
-                    <div style={{position:'sticky',top:0,zIndex:3,background:'var(--surface)',borderBottom:'1px solid var(--border)',padding:'6px 8px',display:'flex',alignItems:'center',gap:'6px'}}>
-                      <div className="av" style={{width:'26px',height:'26px',fontSize:'9px',fontWeight:'700',flexShrink:0,background:emp.color_bg||'#E6F1FB',color:emp.color_fg||'#185FA5'}}>
-                        {mkIni(emp.full_name)}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:'11px',fontWeight:'700',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.full_name.split(' ')[0]}</div>
-                        {status && <div style={{fontSize:'9px',fontWeight:'700',color:status.color}}>{status.label}</div>}
-                      </div>
-                      <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'16px',padding:'2px',flexShrink:0}}
-                        onClick={()=>openShiftModal(emp)} title="Modifier shift">
-                        <i className="ti ti-pencil"/>
-                      </button>
-                    </div>
+                    {/* Contenu du bloc */}
+                    <div style={{position:'relative',zIndex:2,padding:'6px 8px',height:'100%',display:'flex',flexDirection:'column',gap:'2px'}}>
 
-                    {/* Bloc shift */}
-                    {shift && startH !== null && top !== null && height !== null && (
-                      <div style={{position:'absolute',top:`${top+40}px`,left:'4px',right:'4px',height:`${Math.max(height,32)}px`,
-                        background:`${color}18`,border:`2px solid ${color}`,borderRadius:'10px',overflow:'hidden',zIndex:2}}>
-                        {/* Barre progression */}
-                        {pct > 0 && (
-                          <div style={{position:'absolute',top:0,left:0,width:'100%',height:`${pct}%`,background:`${color}30`,borderBottom:`1.5px solid ${color}`,zIndex:1,transition:'height .5s'}}/>
-                        )}
-                        <div style={{position:'relative',zIndex:2,padding:'5px 7px'}}>
-                          <div style={{fontSize:'10px',fontWeight:'700',color:color}}>{shift.poste}</div>
-                          <div style={{fontSize:'10px',color:color,opacity:.8}}>
-                            {shift.start_time?.slice(0,5)} → {shift.end_time?.slice(0,5)||'?'}
-                          </div>
-                          {dur && <div style={{fontSize:'10px',color:color,opacity:.7}}>{fmtDur(dur)}</div>}
+                      {/* Ligne 1 : Avatar initiales + nom */}
+                      <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                        <div style={{
+                          width:'24px',height:'24px',borderRadius:'6px',
+                          background:color,color:'#fff',
+                          fontSize:'9px',fontWeight:'800',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          flexShrink:0,letterSpacing:'0.5px'
+                        }}>
+                          {ini}
                         </div>
-                        <button style={{position:'absolute',top:'3px',right:'3px',background:'none',border:'none',cursor:'pointer',color:color,fontSize:'13px',opacity:.6,zIndex:3}}
-                          onClick={()=>removeShift(shift.id)}>
+                        {height > 40 && (
+                          <span style={{fontSize:'11px',fontWeight:'800',color:color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
+                            {emp?.full_name?.split(' ')[0] || '—'}
+                          </span>
+                        )}
+                        {/* Bouton supprimer */}
+                        <button
+                          style={{background:'none',border:'none',cursor:'pointer',color:color,fontSize:'12px',opacity:.6,padding:'0',flexShrink:0,marginLeft:'auto'}}
+                          onClick={e=>{e.stopPropagation();removeShift(s.id)}}>
                           <i className="ti ti-x"/>
                         </button>
                       </div>
-                    )}
 
-                    {/* ── TÂCHES de cet employé ── */}
-                    {empTasks.map(task => {
-                      const tH    = timeToH(task.task_time?.slice(0,5))
-                      const tY    = tH ? hToY(tH) + 40 : 0 // +40 pour le header
-                      const tBg   = TASK_COLORS.find(c=>c.value===task.color)?.bg || '#E6F1FB'
-                      return (
-                        <div key={task.id} style={{position:'absolute',top:`${tY}px`,left:'4px',right:'4px',zIndex:6}}
-                          onClick={()=>openTaskModal(emp.id, task)}>
-                          <div style={{background:tBg,border:`2px solid ${task.color}`,borderRadius:'8px',padding:'4px 8px',cursor:'pointer',boxShadow:'0 2px 8px rgba(0,0,0,.1)'}}>
-                            <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                              <div style={{width:'6px',height:'6px',borderRadius:'50%',background:task.color,flexShrink:0}}/>
-                              <span style={{fontSize:'10px',fontWeight:'700',color:task.color,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.task_time?.slice(0,5)} — {task.title}</span>
-                              <i className="ti ti-x" style={{fontSize:'11px',color:task.color,flexShrink:0}} onClick={e=>{e.stopPropagation();removeTask(task.id)}}/>
-                            </div>
-                            {task.description && <div style={{fontSize:'9px',color:task.color,opacity:.8,marginTop:'2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.description}</div>}
-                          </div>
+                      {/* Ligne 2 : Poste */}
+                      {height > 56 && (
+                        <div style={{fontSize:'10px',fontWeight:'600',color:color,opacity:.85}}>
+                          {s.poste}
                         </div>
-                      )
-                    })}
+                      )}
 
-                    {/* Bouton + tâche (flottant en bas de la colonne) */}
-                    <button style={{position:'sticky',bottom:'90px',left:'50%',transform:'translateX(-50%)',background:'var(--accent)',border:'none',borderRadius:'20px',color:'#fff',fontSize:'11px',fontWeight:'700',padding:'6px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap',boxShadow:'0 2px 8px rgba(0,0,0,.15)',zIndex:3,marginLeft:'4px',marginRight:'4px',width:'calc(100% - 8px)',justifyContent:'center'}}
-                      onClick={()=>openTaskModal(emp.id)}>
-                      <i className="ti ti-flag" style={{fontSize:'13px'}}/>+ Tâche
-                    </button>
-
-                    {/* Zone cliquable pour ajouter shift si aucun */}
-                    {!shift && (
-                      <div style={{position:'absolute',top:'44px',left:'4px',right:'4px',bottom:'40px',border:'2px dashed var(--border)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:1,background:'transparent'}}
-                        onClick={()=>openShiftModal(emp)}>
-                        <div style={{textAlign:'center'}}>
-                          <i className="ti ti-plus" style={{fontSize:'20px',color:'var(--text3)',display:'block'}}/>
-                          <span style={{fontSize:'10px',color:'var(--text3)'}}>Shift</span>
+                      {/* Ligne 3 : Horaires */}
+                      {height > 72 && (
+                        <div style={{fontSize:'10px',color:color,opacity:.7}}>
+                          {s.start_time?.slice(0,5)} → {s.end_time?.slice(0,5)||'?'}
                         </div>
-                      </div>
-                    )}
+                      )}
+
+                      {/* Badge statut en bas */}
+                      {status && height > 88 && (
+                        <div style={{
+                          marginTop:'auto',
+                          fontSize:'9px',fontWeight:'700',
+                          color:status.color,
+                          background:`${status.color}20`,
+                          borderRadius:'6px',padding:'2px 5px',
+                          display:'inline-block',alignSelf:'flex-start'
+                        }}>
+                          {status.label}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
-              })
+              }))
             })()}
+
+            {/* ── TÂCHES (toutes les tâches du jour) ── */}
+            {tasks.map(task => {
+              const tH  = timeToH(task.task_time?.slice(0,5))
+              if (!tH) return null
+              const tY  = hToY(tH)
+              const emp = emps.find(e=>e.id===task.user_id)
+              const tBg = TASK_COLORS.find(c=>c.value===task.color)?.bg || '#E6F1FB'
+              const ini = emp ? ((emp.full_name.trim().split(' ')[0]||'').substring(0,2)+(emp.full_name.trim().split(' ')[1]||'').substring(0,1)).toUpperCase() : '?'
+
+              return (
+                <div key={task.id}
+                  style={{position:'absolute',top:`${tY - 14}px`,right:'6px',zIndex:7,maxWidth:'160px'}}
+                  onClick={()=>openTaskModal(task.user_id, task)}>
+                  <div style={{
+                    background:tBg,border:`1.5px solid ${task.color}`,
+                    borderRadius:'8px',padding:'4px 8px',cursor:'pointer',
+                    boxShadow:`0 2px 8px ${task.color}25`,
+                    display:'flex',alignItems:'center',gap:'5px'
+                  }}>
+                    <div style={{width:'6px',height:'6px',borderRadius:'50%',background:task.color,flexShrink:0}}/>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:'9px',fontWeight:'700',color:task.color,whiteSpace:'nowrap'}}>{task.task_time?.slice(0,5)} · {ini}</div>
+                      <div style={{fontSize:'10px',fontWeight:'700',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.title}</div>
+                    </div>
+                    <i className="ti ti-x" style={{fontSize:'10px',color:task.color,flexShrink:0,marginLeft:'2px'}} onClick={e=>{e.stopPropagation();removeTask(task.id)}}/>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Bouton + Tâche flottant */}
+            <div style={{position:'sticky',bottom:'90px',right:'10px',float:'right',marginRight:'10px',zIndex:8}}>
+              <button
+                style={{background:'var(--accent)',border:'none',borderRadius:'20px',color:'#fff',fontSize:'12px',fontWeight:'700',padding:'8px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:'5px',boxShadow:'0 4px 16px rgba(26,26,46,.3)'}}
+                onClick={()=>openTaskModal(employees[0]?.id||'')}>
+                <i className="ti ti-flag" style={{fontSize:'14px'}}/>+ Tâche
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
+
+      {/* ── LISTE EMPLOYÉS NON PLANIFIÉS ── */}
+      {employees.filter(e=>!shifts.find(s=>s.user_id===e.id)).length > 0 && (
+        <div style={{padding:'10px 14px',borderTop:'1px solid var(--border)',background:'var(--surface)'}}>
+          <div style={{fontSize:'11px',fontWeight:'700',color:'var(--text2)',marginBottom:'8px',textTransform:'uppercase',letterSpacing:'.05em'}}>Non planifiés</div>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            {employees.filter(e=>!shifts.find(s=>s.user_id===e.id)).map(e=>{
+              const ini = ((e.full_name.trim().split(' ')[0]||'').substring(0,2)+(e.full_name.trim().split(' ')[1]||'').substring(0,1)).toUpperCase()
+              return (
+                <div key={e.id} onClick={()=>openShiftModal(e)}
+                  style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg)',border:'1.5px dashed var(--border)',borderRadius:'20px',padding:'5px 12px',cursor:'pointer',transition:'border-color .15s'}}
+                  onMouseEnter={el=>el.currentTarget.style.borderColor='var(--accent)'}
+                  onMouseLeave={el=>el.currentTarget.style.borderColor='var(--border)'}>
+                  <div style={{width:'22px',height:'22px',borderRadius:'6px',background:e.color_bg||'#E6F1FB',color:e.color_fg||'#185FA5',fontSize:'9px',fontWeight:'800',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    {ini}
+                  </div>
+                  <span style={{fontSize:'12px',fontWeight:'600',color:'var(--text2)'}}>{e.full_name.split(' ')[0]}</span>
+                  <i className="ti ti-plus" style={{fontSize:'12px',color:'var(--accent)'}}/>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ══ MODAL SHIFT ══ */}
       {shiftModal && (
