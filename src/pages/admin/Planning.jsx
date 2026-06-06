@@ -183,9 +183,12 @@ export default function AdminPlanning() {
                 ))}
                 {dayShifts.length===0 && <div style={{fontSize:'12px',color:'var(--text3)'}}>Aucun shift</div>}
               </div>
-              <div style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'8px'}}>
-                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>openDay(day)}>
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'8px',gap:'4px'}}>
+                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>openDay(day)} title="Ajouter shift">
                   <i className="ti ti-plus"/>
+                </button>
+                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--blue)',fontSize:'18px',padding:'4px'}} onClick={()=>navigate(`/admin/day?date=${format(day,'yyyy-MM-dd')}`)} title="Vue timeline">
+                  <i className="ti ti-timeline"/>
                 </button>
               </div>
             </div>
@@ -207,7 +210,10 @@ export default function AdminPlanning() {
       <div className="card">
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'15px',fontWeight:'700'}}>{format(selectedDay,'EEEE d MMMM',{locale:fr})}</div>
-          <div style={{display:'flex',gap:'8px'}}>
+          <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+            <button className="btn btn-p btn-sm" onClick={()=>navigate(`/admin/day?date=${format(selectedDay,'yyyy-MM-dd')}`)}>
+              <i className="ti ti-timeline"/>Timeline
+            </button>
             <button className="btn btn-s btn-sm" onClick={()=>setModalNote({date:selectedDay})}><i className="ti ti-pencil"/>Note</button>
             <i className="ti ti-x" style={{fontSize:'20px',cursor:'pointer',color:'var(--text3)'}} onClick={()=>setSelectedDay(null)}/>
           </div>

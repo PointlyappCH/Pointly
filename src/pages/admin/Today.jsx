@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import { format, parseISO } from 'date-fns'
@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale'
 
 export default function AdminToday() {
   const { company } = useAuth()
+  const navigate = useNavigate()
   const [emps, setEmps]     = useState([])
   const [shifts, setShifts] = useState([])
   const [logs, setLogs]     = useState([])
@@ -100,6 +101,9 @@ export default function AdminToday() {
       <div className="topbar">
         <Link to="/admin" style={{textDecoration:'none',color:'var(--text2)'}}><i className="ti ti-arrow-left" style={{fontSize:'22px'}}/></Link>
         <h1>Aujourd'hui</h1>
+        <button className="btn btn-sm btn-p" onClick={()=>navigate(`/admin/day?date=${today}`)}>
+          <i className="ti ti-timeline"/>Timeline
+        </button>
         <div style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'12px',color:'var(--green)',fontWeight:'700'}}>
           <span className="live-dot"/>
           {format(new Date(),'HH:mm')}
