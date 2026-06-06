@@ -19,6 +19,7 @@ import EmpPlanning        from './pages/employee/Planning'
 import EmpDispo           from './pages/employee/Dispo'
 import EmpChat            from './pages/employee/Chat'
 import EmpProfile         from './pages/employee/Profile'
+import EmpDayView       from './pages/employee/DayView'
 import EmpExchanges       from './pages/employee/Exchanges'
 
 function ProtectedRoute({ children, requireAdmin }) {
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/emp/dispo"        element={<ProtectedRoute><EmpDispo /></ProtectedRoute>} />
           <Route path="/emp/chat"         element={<ProtectedRoute><EmpChat /></ProtectedRoute>} />
           <Route path="/emp/profile"      element={<ProtectedRoute><EmpProfile /></ProtectedRoute>} />
+          <Route path="/emp/day"         element={<ProtectedRoute><EmpDayView /></ProtectedRoute>} />
           <Route path="/emp/exchanges"    element={<ProtectedRoute><EmpExchanges /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
