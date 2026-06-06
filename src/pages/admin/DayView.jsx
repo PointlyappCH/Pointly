@@ -25,6 +25,7 @@ export default function DayView() {
   const dateParam = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd')
 
   const [shifts,  setShifts]  = useState([])
+  const [lastUpdate, setLastUpdate] = useState(new Date())
   const [logs,    setLogs]    = useState([])
   const [emps,    setEmps]    = useState([])
   const [postes,  setPostes]  = useState([])
@@ -70,16 +71,38 @@ export default function DayView() {
       setShiftForm(f=>({...f, userId:employees[0].id, poste:employees[0].poste||p?.[0]?.name||''}))
   }
 
+  // Recharge uniquement les logs (pointages) — rapide
+  async function reloadLogs() {
+    if (!company) return
+    const { data:l } = await supabase.from('time_logs').select('*')
+      .eq('company_id', company.id).eq('log_date', dateParam)
+    setLogs(l||[])
+    setLastUpdate(new Date())
+  }
+
   useEffect(() => {
     load()
-    const iv = setInterval(() => setNow(new Date()), 15000)
-    const ch = supabase.channel('dayview-'+dateParam)
-      .on('postgres_changes',{event:'*',schema:'public',table:'time_logs'},load)
-      .on('postgres_changes',{event:'*',schema:'public',table:'shifts'},load)
-      .on('postgres_changes',{event:'*',schema:'public',table:'shift_tasks'},load)
-      .subscribe()
-    return () => { clearInterval(iv); supabase.removeChannel(ch) }
-  }, [company, dateParam])
+    // Timer rapide pour la ligne "maintenant" et les barres de progression
+    const clockIv = setInterval(() => setNow(new Date()), 5000)
+    // Rechargement des pointages toutes les 20 secondes (fallback si realtime ne marche pas)
+    const reloadIv = setInterval(() => reloadLogs(), 20000)
+    // Realtime Supabase
+    const ch = supabase.channel('dayview-'+dateParam+'-'+Date.now())
+      .on('postgres_changes',{event:'*',schema:'public',table:'time_logs',filter:`company_id=eq.${company?.id}`},() => {
+        console.log('Realtime: time_logs change')
+        reloadLogs()
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'shifts',filter:`company_id=eq.${company?.id}`},load)
+      .on('postgres_changes',{event:'*',schema:'public',table:'shift_tasks',filter:`company_id=eq.${company?.id}`},load)
+      .subscribe((status) => {
+        console.log('Realtime status:', status)
+      })
+    return () => {
+      clearInterval(clockIv)
+      clearInterval(reloadIv)
+      supabase.removeChannel(ch)
+    }
+  }, [company?.id, dateParam])
 
   // ── SHIFT CRUD ──
   async function saveShift() {
@@ -206,9 +229,18 @@ export default function DayView() {
         <Link to="/admin/planning" style={{textDecoration:'none',color:'var(--text2)'}}><i className="ti ti-arrow-left" style={{fontSize:'22px'}}/></Link>
         <div style={{display:'flex',alignItems:'center',gap:'8px',flex:1}}>
           <i className="ti ti-chevron-left" style={{fontSize:'18px',cursor:'pointer',color:'var(--text2)'}} onClick={()=>navigate(`/admin/day?date=${prevDay}`)}/>
-          <h1 style={{flex:1,textAlign:'center',fontSize:'15px'}}>{format(dateObj,'EEE d MMM',{locale:fr})}</h1>
+          <div style={{flex:1,textAlign:'center'}}>
+            <div style={{fontSize:'15px',fontWeight:'700'}}>{format(dateObj,'EEE d MMM',{locale:fr})}</div>
+            <div style={{fontSize:'10px',color:'var(--text3)'}}>
+              <span className="live-dot" style={{display:'inline-block',width:'5px',height:'5px',marginRight:'3px'}}/>
+              MàJ {format(lastUpdate,'HH:mm:ss')}
+            </div>
+          </div>
           <i className="ti ti-chevron-right" style={{fontSize:'18px',cursor:'pointer',color:'var(--text2)'}} onClick={()=>navigate(`/admin/day?date=${nextDay}`)}/>
         </div>
+        <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--text2)',fontSize:'20px',padding:'4px'}} onClick={()=>{load();showToast('Actualisé ✅')}} title="Actualiser">
+          <i className="ti ti-refresh"/>
+        </button>
         <button className="btn btn-sm btn-p" onClick={()=>openShiftModal(null)}>
           <i className="ti ti-plus"/>Shift
         </button>
