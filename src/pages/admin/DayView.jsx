@@ -52,7 +52,8 @@ export default function DayView() {
   const totalH = HOUR_END - HOUR_START + 1
 
   async function load() {
-    if (!company) return
+    if (!company?.id) return
+    console.log('DayView load:', { company: company.id, date: dateParam })
     const [{ data:s },{ data:l },{ data:e },{ data:p },{ data:n },{ data:t }] = await Promise.all([
       supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)')
         .eq('company_id', company.id).eq('shift_date', dateParam),
@@ -64,6 +65,7 @@ export default function DayView() {
       supabase.from('shift_tasks').select('*')
         .eq('company_id', company.id).eq('task_date', dateParam).order('task_time'),
     ])
+    console.log('DayView shifts loaded:', s?.length, 'shifts for date', dateParam)
     setShifts(s||[]); setLogs(l||[]); setEmps(e||[]); setPostes(p||[])
     setNote(n); setTasks(t||[])
     const employees = e?.filter(em=>em.role==='employee')||[]
@@ -115,14 +117,23 @@ export default function DayView() {
       end_time:   shiftForm.hasEndTime ? shiftForm.endTime : null,
       created_by: profile.id,
     }
-    if (existing) await supabase.from('shifts').update(payload).eq('id', existing.id)
-    else          await supabase.from('shifts').insert(payload)
-    load(); setShiftModal(null); showToast('Shift enregistré ✅')
+    if (existing) {
+      const { error } = await supabase.from('shifts').update(payload).eq('id', existing.id)
+      if (error) { showToast('Erreur : '+error.message); return }
+    } else {
+      const { error } = await supabase.from('shifts').insert(payload)
+      if (error) { showToast('Erreur : '+error.message); return }
+    }
+    // Attendre que load() soit terminé avant de fermer
+    await load()
+    setShiftModal(null)
+    showToast('Shift enregistré ✅')
   }
 
   async function removeShift(id) {
     await supabase.from('shifts').delete().eq('id', id)
-    load(); showToast('Shift supprimé')
+    await load()
+    showToast('Shift supprimé')
   }
 
   function openShiftModal(emp) {
