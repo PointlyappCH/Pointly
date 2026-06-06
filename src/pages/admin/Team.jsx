@@ -144,58 +144,74 @@ export default function AdminTeam() {
     copyToClipboard(`Bonjour ${emp.name} 👋\n\nVoici ton accès à Pointly :\n🔗 App : ${appUrl}\n📧 Email : ${emp.email}\n🔑 Mot de passe : ${emp.pwd}\n\nConnecte-toi et commence à pointer !`)
   }
 
-  const FormFields = ({ isEdit }) => (
-    <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-      <div className="iw"><div className="il">Nom complet</div>
-        <input className="if" value={form.name} onChange={set('name')} required placeholder="Marc Lacroix"/>
-      </div>
-      {!isEdit && <>\n        <div className="iw"><div className="il">Email</div>
-          <input className="if" type="email" value={form.email} onChange={set('email')} required placeholder="marc@email.com"/>
+  // Inline form fields — pas de sous-composant pour éviter le re-render à chaque frappe
+  function renderFormFields(isEdit) {
+    return (
+      <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+        <div className="iw">
+          <div className="il">Nom complet</div>
+          <input className="if" value={form.name} onChange={set('name')} required placeholder="Marc Lacroix"/>
         </div>
-        <div className="iw"><div className="il">Mot de passe provisoire</div>
-          <input className="if" type="text" value={form.pwd} onChange={set('pwd')} required placeholder="Ex: Pointly2025"/>
-        </div>
-        <div className="iw"><div className="il">Rôle</div>
-          <select className="if" value={form.role||'employee'} onChange={set('role')} style={{cursor:'pointer'}}>
-            <option value="employee">Employé</option>
-            <option value="moderator">Modérateur — accès planning + équipe, sans export heures</option>
+        {!isEdit && <>
+          <div className="iw">
+            <div className="il">Email</div>
+            <input className="if" type="email" value={form.email} onChange={set('email')} required placeholder="marc@email.com"/>
+          </div>
+          <div className="iw">
+            <div className="il">Mot de passe provisoire</div>
+            <input className="if" type="text" value={form.pwd} onChange={set('pwd')} required placeholder="Ex: Pointly2025"/>
+          </div>
+          <div className="iw">
+            <div className="il">Rôle</div>
+            <select className="if" value={form.role||'employee'} onChange={set('role')} style={{cursor:'pointer'}}>
+              <option value="employee">Employé</option>
+              <option value="moderator">Modérateur — accès planning + équipe, sans export heures</option>
+            </select>
+          </div>
+        </>}
+        <div className="iw">
+          <div className="il">Poste</div>
+          <select className="if" value={form.poste} onChange={set('poste')} style={{cursor:'pointer'}}>
+            {postes.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+            {postes.length===0 && <option>— Créez d'abord des postes</option>}
           </select>
         </div>
-      </>}
-      <div className="iw"><div className="il">Poste</div>
-        <select className="if" value={form.poste} onChange={set('poste')} style={{cursor:'pointer'}}>
-          {postes.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-          {postes.length===0 && <option>— Créez d'abord des postes</option>}
-        </select>
-      </div>
-      <div className="iw"><div className="il">Type de contrat</div>
-        <select className="if" value={form.contract} onChange={set('contract')} style={{cursor:'pointer'}}>
-          <option value="fixe">Employé fixe</option>
-          <option value="heure">À l'heure</option>
-        </select>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-        <div className="iw"><div className="il">Heures / mois</div>
-          <input className="if" type="number" value={form.hDue} onChange={set('hDue')} min="1" max="300"/>
+        <div className="iw">
+          <div className="il">Type de contrat</div>
+          <select className="if" value={form.contract} onChange={set('contract')} style={{cursor:'pointer'}}>
+            <option value="fixe">Employé fixe</option>
+            <option value="heure">À l'heure</option>
+          </select>
         </div>
-        <div className="iw"><div className="il">Vacances / an</div>
-          <input className="if" type="number" value={form.vacDroit} onChange={set('vacDroit')} min="0" max="60"/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+          <div className="iw">
+            <div className="il">Heures / mois</div>
+            <input className="if" type="number" value={form.hDue} onChange={set('hDue')} min="1" max="300"/>
+          </div>
+          <div className="iw">
+            <div className="il">Vacances / an</div>
+            <input className="if" type="number" value={form.vacDroit} onChange={set('vacDroit')} min="0" max="60"/>
+          </div>
+        </div>
+        {isEdit && (
+          <div className="iw">
+            <div className="il">Vacances pris</div>
+            <input className="if" type="number" value={form.vacPris} onChange={set('vacPris')} min="0" max="60"/>
+          </div>
+        )}
+        <div className="iw">
+          <div className="il">Cycle de calcul</div>
+          <select className="if" value={form.cycle} onChange={set('cycle')} style={{cursor:'pointer'}}>
+            <option value="1-1">Du 1er au 1er</option>
+            <option value="25-25">Du 25 au 25</option>
+            <option value="15-15">Du 15 au 15</option>
+            <option value="20-20">Du 20 au 20</option>
+            <option value="10-10">Du 10 au 10</option>
+          </select>
         </div>
       </div>
-      {isEdit && <div className="iw"><div className="il">Vacances pris</div>
-        <input className="if" type="number" value={form.vacPris} onChange={set('vacPris')} min="0" max="60"/>
-      </div>}
-      <div className="iw"><div className="il">Cycle de calcul</div>
-        <select className="if" value={form.cycle} onChange={set('cycle')} style={{cursor:'pointer'}}>
-          <option value="1-1">Du 1er au 1er</option>
-          <option value="25-25">Du 25 au 25</option>
-          <option value="15-15">Du 15 au 15</option>
-          <option value="20-20">Du 20 au 20</option>
-          <option value="10-10">Du 10 au 10</option>
-        </select>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="screen">
@@ -335,7 +351,7 @@ export default function AdminTeam() {
             <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'16px'}}>Un lien d'invitation sera généré après création</div>
             {err && <div className="err-bar" style={{marginBottom:'12px'}}>{err}</div>}
             <form onSubmit={handleAdd}>
-              <FormFields isEdit={false}/>
+              {renderFormFields(false)}
               <button className="btn btn-p" type="submit" style={{marginTop:'16px'}} disabled={loading}>
                 {loading?'Ajout…':<><i className="ti ti-user-plus"/>Ajouter et générer invitation</>}
               </button>
@@ -353,7 +369,7 @@ export default function AdminTeam() {
             <div style={{fontSize:'18px',fontWeight:'800',marginBottom:'4px'}}>Modifier {editEmp.full_name}</div>
             {err && <div className="err-bar" style={{marginBottom:'12px'}}>{err}</div>}
             <form onSubmit={handleEdit}>
-              <FormFields isEdit={true}/>
+              {renderFormFields(true)}
               <button className="btn btn-p" type="submit" style={{marginTop:'16px'}} disabled={loading}>
                 {loading?'…':<><i className="ti ti-check"/>Enregistrer</>}
               </button>
