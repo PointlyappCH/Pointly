@@ -268,7 +268,7 @@ export default function DayView() {
       <div style={{flex:1,overflowY:'auto',paddingBottom:'80px'}}>
 
         {/* ══════ TIMELINE ══════ */}
-        <div style={{display:'flex',minHeight:`${totalH*HOUR_PX}px`,position:'relative'}}>
+        <div style={{display:'flex',height:`${totalH*HOUR_PX}px`,position:'relative',overflow:'hidden'}}>
 
           {/* Colonne heures */}
           <div style={{width:'46px',flexShrink:0,background:'var(--surface)',borderRight:'1px solid var(--border)',position:'sticky',left:0,zIndex:4}}>
@@ -282,7 +282,7 @@ export default function DayView() {
           </div>
 
           {/* Zone des employés */}
-          <div style={{flex:1,position:'relative',background:'var(--bg)'}}>
+          <div style={{flex:1,position:'relative',background:'var(--bg)',height:`${totalH*HOUR_PX}px`}}>
 
             {/* Lignes horizontales */}
             {HOURS.map(h=>(
