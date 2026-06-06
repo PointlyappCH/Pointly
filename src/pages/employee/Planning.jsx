@@ -48,7 +48,13 @@ export default function EmpPlanning() {
     setDispos(d||[])
   }
 
-  useEffect(() => { loadData() }, [profile, company, cursor, view])
+  useEffect(() => {
+    loadData()
+    const ch = supabase.channel('planning-emp-'+profile?.id)
+      .on('postgres_changes',{event:'*',schema:'public',table:'shifts'},loadData)
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [profile, company, cursor, view])
 
   function myShiftsForDay(date) {
     const key = format(date,'yyyy-MM-dd')
@@ -100,7 +106,7 @@ export default function EmpPlanning() {
             const hasMine = mine.length > 0
             return (
               <div key={day.toISOString()}
-                onClick={()=>window.location.href='/emp/day?date='+format(day,'yyyy-MM-dd')}
+                onClick={()=>openDayDetail(day)}
                 style={{minHeight:'44px',borderRadius:'8px',cursor:'pointer',padding:'3px',
                   background: hasMine ? 'var(--blue-bg)' : dispo ? dispoBg[dispo.status]||'transparent' : 'transparent',
                   border:`1px solid ${today?'var(--accent)':'var(--border)'}`,
@@ -145,7 +151,7 @@ export default function EmpPlanning() {
           const note = noteForDay(day)
           const today = isToday(day)
           return (
-            <div key={day.toISOString()} style={{display:'flex',borderBottom:'1px solid var(--border)',background:today?'var(--blue-bg)':undefined,cursor:'pointer'}} onClick={()=>window.location.href='/emp/day?date='+format(day,'yyyy-MM-dd')}>
+            <div key={day.toISOString()} style={{display:'flex',borderBottom:'1px solid var(--border)',background:today?'var(--blue-bg)':undefined,cursor:'pointer'}} onClick={()=>openDayDetail(day)}>
               <div style={{width:'48px',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 4px',borderRight:'1px solid var(--border)'}}>
                 <div style={{fontSize:'11px',color:'var(--text3)',fontWeight:'600'}}>{format(day,'EEE',{locale:fr}).toUpperCase()}</div>
                 <div style={{width:'28px',height:'28px',borderRadius:'50%',background:today?'var(--accent)':undefined,color:today?'#fff':'var(--text)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:'800',marginTop:'2px'}}>
@@ -182,6 +188,7 @@ export default function EmpPlanning() {
       <div className="topbar">
         <Link to="/emp" style={{textDecoration:'none',color:'var(--text2)'}}><i className="ti ti-arrow-left" style={{fontSize:'22px'}}/></Link>
         <h1>Mon planning</h1>
+        <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--text2)',fontSize:'20px',padding:'4px'}} onClick={loadData} title="Actualiser"><i className="ti ti-refresh"/></button>
       </div>
 
       <div className="content">

@@ -53,7 +53,14 @@ export default function AdminPlanning() {
     if (e?.length && !shiftForm.userId) setShiftForm(f=>({...f, userId:e[0].id, poste:e[0].poste||p?.[0]?.name||''}))
   }
 
-  useEffect(() => { loadData() }, [company, cursor, view])
+  useEffect(() => {
+    loadData()
+    const ch = supabase.channel('planning-admin')
+      .on('postgres_changes',{event:'*',schema:'public',table:'shifts'},loadData)
+      .on('postgres_changes',{event:'*',schema:'public',table:'shift_tasks'},loadData)
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [company, cursor, view])
 
   function shiftsForDay(date){ const key=format(date,'yyyy-MM-dd'); return shifts.filter(s=>s.shift_date===key) }
   function noteForDay(date){ const key=format(date,'yyyy-MM-dd'); return notes.find(n=>n.note_date===key) }
@@ -119,7 +126,7 @@ export default function AdminPlanning() {
             const today = isToday(day)
             const isSel = selectedDay && format(day,'yyyy-MM-dd')===format(selectedDay,'yyyy-MM-dd')
             return (
-              <div key={day.toISOString()} onClick={()=>window.location.href='/admin/day?date='+format(day,'yyyy-MM-dd')}
+              <div key={day.toISOString()} onClick={()=>openDay(day)}
                 style={{minHeight:'48px',borderRadius:'8px',cursor:'pointer',padding:'3px',
                   background:isSel?'var(--blue-bg)':today?'rgba(24,95,165,.08)':note?.color==='red'?'var(--red-bg)':note?'var(--blue-bg)':'transparent',
                   border:`1.5px solid ${isSel?'var(--accent)':today?'var(--blue)':'var(--border)'}`,
@@ -177,7 +184,7 @@ export default function AdminPlanning() {
                 {dayShifts.length===0 && <div style={{fontSize:'12px',color:'var(--text3)'}}>Aucun shift</div>}
               </div>
               <div style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:'8px'}}>
-                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>window.location.href='/admin/day?date='+format(day,'yyyy-MM-dd')}>
+                <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--accent)',fontSize:'20px',padding:'4px'}} onClick={()=>openDay(day)}>
                   <i className="ti ti-plus"/>
                 </button>
               </div>
@@ -284,6 +291,7 @@ export default function AdminPlanning() {
       <div className="topbar">
         <Link to="/admin" style={{textDecoration:'none',color:'var(--text2)'}}><i className="ti ti-arrow-left" style={{fontSize:'22px'}}/></Link>
         <h1>Planning</h1>
+        <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--text2)',fontSize:'20px',padding:'4px'}} onClick={loadData} title="Actualiser"><i className="ti ti-refresh"/></button>
       </div>
       <div className="content">
         <div style={{display:'flex',gap:'8px'}}>
