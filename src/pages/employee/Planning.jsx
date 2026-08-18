@@ -72,13 +72,6 @@ export default function EmpPlanning() {
       .eq('user_id', profile.id)
       .gte('dispo_date', fmt(start)).lte('dispo_date', fmt(end))
 
-    console.log('Planning loaded:', {
-      profileId: profile.id,
-      myShifts: (myShifts||[]).length,
-      teamShifts: teamShifts.length,
-      total: all.length,
-    })
-
     setShifts(all)
     setNotes(notes)
     setDispos(d||[])
@@ -90,7 +83,6 @@ export default function EmpPlanning() {
     loadData()
     const ch = supabase.channel('emp-planning-'+profile.id)
       .on('postgres_changes', { event:'*', schema:'public', table:'shifts' }, () => {
-        console.log('Realtime shift change detected, reloading...')
         loadData()
       })
       .subscribe()
