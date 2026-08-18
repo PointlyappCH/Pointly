@@ -20,6 +20,11 @@ export default function EmpHome() {
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState('')
   const [checkingCode, setCheckingCode] = useState(false)
+  const [startSector, setStartSector] = useState('')
+  const [segments, setSegments] = useState([])
+  const [showSectorModal, setShowSectorModal] = useState(false)
+  const [sectorInput, setSectorInput] = useState('')
+  const [savingSector, setSavingSector] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const dateLabel = format(new Date(), "EEEE d MMMM", { locale: fr })
@@ -36,6 +41,13 @@ export default function EmpHome() {
       supabase.from('exchanges').select('id').eq('target_id', profile.id).eq('status','pending'),
     ])
     setLog(l); setMyShift(s); setPendingExchanges((ex||[]).length)
+    if (l?.id) {
+      const { data: segs } = await supabase.from('shift_segments')
+        .select('*').eq('time_log_id', l.id).order('started_at')
+      setSegments(segs||[])
+    } else {
+      setSegments([])
+    }
   }
 
   useEffect(() => {
@@ -83,26 +95,73 @@ export default function EmpHome() {
     if (codeInput.trim() !== validCode) {
       setCodeError('Code incorrect'); setCheckingCode(false); return
     }
-    await supabase.from('time_logs').upsert({
+    const { data: newLog, error: insErr } = await supabase.from('time_logs').upsert({
       user_id: profile.id, company_id: company.id,
       log_date: today, punched_in: new Date().toISOString(),
-    }, { onConflict: 'user_id,log_date' })
-    setCheckingCode(false); setShowCodeModal(false); setCodeInput('')
+    }, { onConflict: 'user_id,log_date' }).select().single()
+
+    if (!insErr && newLog && company.sectors_enabled) {
+      await supabase.from('shift_segments').insert({
+        time_log_id: newLog.id, company_id: company.id, user_id: profile.id,
+        sector: startSector.trim() || 'Général',
+        started_at: new Date().toISOString(),
+      })
+    }
+
+    setCheckingCode(false); setShowCodeModal(false); setCodeInput(''); setStartSector('')
     loadLog(); showToast('Pointé ✅')
+  }
+
+  function currentOpenSegment() {
+    return segments.find(s => !s.ended_at) || null
   }
 
   async function togglePause() {
     if (!log) return
-    if (isPaused) await supabase.from('time_logs').update({ pause_end: new Date().toISOString() }).eq('id', log.id)
-    else          await supabase.from('time_logs').update({ pause_start: new Date().toISOString() }).eq('id', log.id)
+    const now = new Date().toISOString()
+    if (isPaused) {
+      await supabase.from('time_logs').update({ pause_end: now }).eq('id', log.id)
+      if (company?.sectors_enabled) {
+        const lastSector = segments[segments.length-1]?.sector || 'Général'
+        await supabase.from('shift_segments').insert({
+          time_log_id: log.id, company_id: company.id, user_id: profile.id,
+          sector: lastSector, started_at: now,
+        })
+      }
+    } else {
+      await supabase.from('time_logs').update({ pause_start: now }).eq('id', log.id)
+      if (company?.sectors_enabled) {
+        const open = currentOpenSegment()
+        if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
+      }
+    }
     loadLog()
+  }
+
+  async function changeSector() {
+    if (!log || !sectorInput.trim() || savingSector) return
+    setSavingSector(true)
+    const now = new Date().toISOString()
+    const open = currentOpenSegment()
+    if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
+    await supabase.from('shift_segments').insert({
+      time_log_id: log.id, company_id: company.id, user_id: profile.id,
+      sector: sectorInput.trim(), started_at: now,
+    })
+    setSavingSector(false); setShowSectorModal(false); setSectorInput('')
+    loadLog(); showToast('Secteur changé ✅')
   }
 
   async function depoint() {
     if (!log) return
     const net = workedMs / 3600000
+    const now = new Date().toISOString()
+    if (company?.sectors_enabled) {
+      const open = currentOpenSegment()
+      if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
+    }
     await supabase.from('time_logs').update({
-      punched_out: new Date().toISOString(), net_hours: net,
+      punched_out: now, net_hours: net,
       remark: remark||null, error_24h: isError,
     }).eq('id', log.id)
     setShowDepoint(false); setRemark(''); loadLog()
@@ -167,14 +226,24 @@ export default function EmpHome() {
             <div className="pl">{label}</div>
           </div>
           {(isWorking||isPaused) && !isDone && (
-            <div style={{display:'flex',gap:'8px',marginTop:'14px',justifyContent:'center'}}>
+            <div style={{display:'flex',gap:'8px',marginTop:'14px',justifyContent:'center',flexWrap:'wrap'}}>
               <button className={`btn btn-sm ${isPaused?'btn-g':'btn-o'}`} onClick={togglePause}>
                 <i className={`ti ${isPaused?'ti-play':'ti-player-pause'}`}/>
                 {isPaused?'Reprendre':'Pause'}
               </button>
+              {isWorking && company?.sectors_enabled && (
+                <button className="btn btn-sm btn-s" onClick={()=>{ setSectorInput(''); setShowSectorModal(true) }}>
+                  <i className="ti ti-map-pin"/>Changer de secteur
+                </button>
+              )}
               <button className="btn btn-sm btn-r" onClick={()=>setShowDepoint(true)}>
                 <i className="ti ti-player-stop"/>Dépointer
               </button>
+            </div>
+          )}
+          {company?.sectors_enabled && isWorking && currentOpenSegment() && (
+            <div style={{marginTop:'10px',fontSize:'12px',color:'var(--text2)'}}>
+              📍 Secteur actuel : <strong style={{color:'var(--text)'}}>{currentOpenSegment().sector}</strong> · depuis {format(parseISO(currentOpenSegment().started_at),'HH:mm')}
             </div>
           )}
           {isDone && log?.punched_in && (
@@ -183,6 +252,29 @@ export default function EmpHome() {
             </div>
           )}
         </div>
+
+        {/* Historique des secteurs du jour */}
+        {company?.sectors_enabled && segments.length > 0 && (
+          <div className="card">
+            <div className="card-title">Secteurs aujourd'hui</div>
+            {segments.map(seg => {
+              const end = seg.ended_at ? new Date(seg.ended_at).getTime() : now
+              const dur = Math.max(0, end - new Date(seg.started_at).getTime())
+              return (
+                <div key={seg.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
+                  <i className="ti ti-map-pin" style={{fontSize:'16px',color:'var(--blue)',flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:'13px',fontWeight:'700'}}>{seg.sector}</div>
+                    <div style={{fontSize:'11px',color:'var(--text3)'}}>
+                      {format(parseISO(seg.started_at),'HH:mm')} → {seg.ended_at?format(parseISO(seg.ended_at),'HH:mm'):'en cours'}
+                    </div>
+                  </div>
+                  <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text2)'}}>{fmtHM(dur)}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="sg">
@@ -235,10 +327,44 @@ export default function EmpHome() {
               style={{fontSize:'26px',textAlign:'center',letterSpacing:'.3em',fontWeight:'800',marginBottom:'8px'}}
             />
             {codeError && <div style={{color:'var(--red)',fontSize:'13px',marginBottom:'10px',textAlign:'center'}}>{codeError}</div>}
+            {company?.sectors_enabled && (
+              <div className="iw" style={{marginBottom:'8px'}}>
+                <div className="il">Secteur de départ (optionnel)</div>
+                <input className="if" value={startSector} onChange={e=>setStartSector(e.target.value)} placeholder="Ex: Piste 3, Chantier Nord…"/>
+              </div>
+            )}
             <button className="btn btn-p" onClick={confirmCodeAndPunchIn} disabled={checkingCode} style={{marginTop:'8px'}}>
               <i className="ti ti-check"/>{checkingCode?'Vérification…':'Valider et pointer'}
             </button>
             <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setShowCodeModal(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHANGEMENT DE SECTEUR */}
+      {showSectorModal && (
+        <div className="modal-bg" onClick={()=>setShowSectorModal(false)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+              <div style={{width:'46px',height:'46px',borderRadius:'50%',background:'var(--blue-bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <i className="ti ti-map-pin" style={{fontSize:'22px',color:'var(--blue)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'18px',fontWeight:'800'}}>Changer de secteur</div>
+                <div style={{fontSize:'13px',color:'var(--text2)'}}>Le compteur continue de tourner</div>
+              </div>
+            </div>
+            <div className="iw" style={{marginBottom:'16px'}}>
+              <div className="il">Nouveau secteur</div>
+              <input className="if" autoFocus value={sectorInput} onChange={e=>setSectorInput(e.target.value)}
+                onKeyDown={e=>{ if(e.key==='Enter') changeSector() }}
+                placeholder="Ex: Piste 3, Chantier Nord…"/>
+            </div>
+            <button className="btn btn-p" onClick={changeSector} disabled={!sectorInput.trim()||savingSector}>
+              <i className="ti ti-check"/>{savingSector?'…':'Confirmer le changement'}
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setShowSectorModal(false)}>Annuler</button>
           </div>
         </div>
       )}
