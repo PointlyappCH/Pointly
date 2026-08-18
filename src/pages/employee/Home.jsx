@@ -69,7 +69,6 @@ export default function EmpHome() {
     return Math.max(0, end - start - pauseMs)
   }
 
-  function fmtMs(ms){ const s=Math.floor(ms/1000); return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}` }
   function fmtHM(ms){ const s=Math.floor(ms/1000); return `${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,'0')}` }
 
   const workedMs   = getWorkedMs()
@@ -168,12 +167,6 @@ export default function EmpHome() {
     showToast(isError ? '⚠️ Correction enregistrée' : 'Dépointé ✅')
   }
 
-  let circleClass='pc', icon='ti-clock', label='Pointer'
-  if (isError)    { circleClass='pc error'; icon='ti-alert-triangle'; label='Erreur 24h' }
-  else if (isDone)   { circleClass='pc done';  icon='ti-check';           label='Terminé' }
-  else if (isPaused) { circleClass='pc ps';    icon='ti-player-pause';    label='En pause' }
-  else if (isWorking){ circleClass='pc in';    icon='ti-clock-check';     label='En cours' }
-
   return (
     <div className="screen">
       <div className="topbar">
@@ -189,14 +182,15 @@ export default function EmpHome() {
           Bonjour <strong style={{color:'var(--text)'}}>{firstName}</strong> · {dateLabel}
         </div>
 
-        {/* Erreur 24h */}
+        {/* Oubli de dépointage */}
         {isError && (
-          <div style={{background:'var(--red-bg)',border:'1.5px solid var(--red)',borderRadius:'var(--rs)',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
-            <i className="ti ti-alert-triangle" style={{fontSize:'22px',color:'var(--red)',flexShrink:0,marginTop:'1px'}}/>
+          <div className="punch-alert">
+            <i className="ti ti-alert-triangle"/>
             <div style={{flex:1}}>
-              <div style={{fontSize:'14px',fontWeight:'700',color:'var(--red)',marginBottom:'3px'}}>Oubli de dépointage détecté</div>
-              <div style={{fontSize:'12px',color:'#8B1F1F',lineHeight:'1.5'}}>Compteur arrêté après 24h. Contactez votre responsable.</div>
-              <button className="btn btn-r btn-sm" style={{marginTop:'8px'}} onClick={()=>setShowDepoint(true)}><i className="ti ti-pencil"/>Corriger</button>
+              Dépointage oublié — compteur arrêté après 24h.
+              <button className="btn btn-r btn-sm" style={{marginTop:'8px'}} onClick={()=>setShowDepoint(true)}>
+                <i className="ti ti-pencil"/>Corriger
+              </button>
             </div>
           </div>
         )}
@@ -216,60 +210,97 @@ export default function EmpHome() {
           </Link>
         )}
 
-        {/* PUNCH */}
-        <div className="card" style={{textAlign:'center',padding:'20px'}}>
-          <div style={{fontSize:'30px',fontWeight:'800',fontVariantNumeric:'tabular-nums',margin:'8px 0',color:isError?'var(--red)':'var(--text)',letterSpacing:'.01em'}}>
-            {fmtMs(workedMs)}
-          </div>
-          <div className={circleClass} onClick={punch}>
-            <i className={`ti ${icon} pi`}/>
-            <div className="pl">{label}</div>
-          </div>
-          {(isWorking||isPaused) && !isDone && (
-            <div style={{display:'flex',gap:'8px',marginTop:'14px',justifyContent:'center',flexWrap:'wrap'}}>
-              <button className={`btn btn-sm ${isPaused?'btn-g':'btn-o'}`} onClick={togglePause}>
-                <i className={`ti ${isPaused?'ti-play':'ti-player-pause'}`}/>
-                {isPaused?'Reprendre':'Pause'}
-              </button>
-              {isWorking && company?.sectors_enabled && (
-                <button className="btn btn-sm btn-s" onClick={()=>{ setSectorInput(''); setShowSectorModal(true) }}>
-                  <i className="ti ti-map-pin"/>Changer de secteur
-                </button>
-              )}
-              <button className="btn btn-sm btn-r" onClick={()=>setShowDepoint(true)}>
+        {/* ═══ POINTAGE ═══ */}
+        <div className={`punch ${isError ? 'punch-error' : isWorking||isPaused ? 'punch-live' : isDone ? 'punch-done' : 'punch-idle'}`}>
+
+          {/* En-tête d'état */}
+          {isError && <div className="punch-eyebrow">Dépointage manquant</div>}
+          {!isError && isWorking && (
+            <div className="punch-eyebrow">
+              Depuis {format(parseISO(log.punched_in),'HH:mm')}
+            </div>
+          )}
+          {!isError && isPaused && <div className="punch-eyebrow">En pause</div>}
+          {!isError && isDone && <div className="punch-eyebrow">Journée terminée</div>}
+          {!isError && !isWorking && !isPaused && !isDone && <div className="punch-eyebrow">{dateLabel}</div>}
+
+          {/* Compteur */}
+          <div className="punch-time">{fmtHM(workedMs)}</div>
+
+          {/* Sous-titre */}
+          {isDone && log?.punched_in && (
+            <div className="punch-note">
+              {format(parseISO(log.punched_in),'HH:mm')} → {format(parseISO(log.punched_out),'HH:mm')}
+            </div>
+          )}
+          {!isWorking && !isPaused && !isDone && (
+            <div className="punch-note">Pas encore pointé</div>
+          )}
+
+          {/* Timeline des secteurs */}
+          {company?.sectors_enabled && segments.length > 0 && (isWorking||isPaused) && (
+            <div className="seg-rail">
+              {segments.map(seg => {
+                const end = seg.ended_at ? new Date(seg.ended_at).getTime() : now
+                const dur = Math.max(0, end - new Date(seg.started_at).getTime())
+                return (
+                  <div key={seg.id} className={`seg-row ${seg.ended_at ? 'past' : ''}`}>
+                    <span className="seg-name">{seg.sector}</span>
+                    <span className="seg-time">{fmtHM(dur)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Action principale */}
+          {!isWorking && !isPaused && !isDone && (
+            <button className="punch-cta punch-cta-start" onClick={punch}>
+              <i className="ti ti-player-play"/>Pointer
+            </button>
+          )}
+          {(isWorking||isPaused) && (
+            <>
+              <button className="punch-cta punch-cta-stop" onClick={()=>setShowDepoint(true)}>
                 <i className="ti ti-player-stop"/>Dépointer
               </button>
-            </div>
-          )}
-          {company?.sectors_enabled && isWorking && currentOpenSegment() && (
-            <div style={{marginTop:'10px',fontSize:'12px',color:'var(--text2)'}}>
-              📍 Secteur actuel : <strong style={{color:'var(--text)'}}>{currentOpenSegment().sector}</strong> · depuis {format(parseISO(currentOpenSegment().started_at),'HH:mm')}
-            </div>
-          )}
-          {isDone && log?.punched_in && (
-            <div style={{marginTop:'12px',fontSize:'13px',color:'var(--text2)'}}>
-              {format(parseISO(log.punched_in),'HH:mm')} → {format(parseISO(log.punched_out),'HH:mm')} · <strong style={{color:'var(--green)'}}>{fmtHM(workedMs)}</strong>
-            </div>
+              <div className="punch-actions">
+                <button className="punch-act" onClick={togglePause}>
+                  <i className={`ti ${isPaused?'ti-player-play':'ti-player-pause'}`}/>
+                  {isPaused?'Reprendre':'Pause'}
+                </button>
+                {company?.sectors_enabled ? (
+                  <button className="punch-act" onClick={()=>{ setSectorInput(''); setShowSectorModal(true) }}>
+                    <i className="ti ti-map-pin"/>Secteur
+                  </button>
+                ) : (
+                  <Link to="/emp/planning" style={{textDecoration:'none'}}>
+                    <button className="punch-act" style={{width:'100%'}}>
+                      <i className="ti ti-calendar"/>Planning
+                    </button>
+                  </Link>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Historique des secteurs du jour */}
-        {company?.sectors_enabled && segments.length > 0 && (
+        {/* Secteurs du jour — après dépointage */}
+        {company?.sectors_enabled && segments.length > 0 && isDone && (
           <div className="card">
             <div className="card-title">Secteurs aujourd'hui</div>
             {segments.map(seg => {
               const end = seg.ended_at ? new Date(seg.ended_at).getTime() : now
               const dur = Math.max(0, end - new Date(seg.started_at).getTime())
               return (
-                <div key={seg.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
-                  <i className="ti ti-map-pin" style={{fontSize:'16px',color:'var(--blue)',flexShrink:0}}/>
-                  <div style={{flex:1}}>
+                <div key={seg.id} style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:'10px',padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div>
                     <div style={{fontSize:'13px',fontWeight:'700'}}>{seg.sector}</div>
-                    <div style={{fontSize:'11px',color:'var(--text3)'}}>
+                    <div style={{fontSize:'11px',color:'var(--text3)',fontFamily:'var(--mono)'}}>
                       {format(parseISO(seg.started_at),'HH:mm')} → {seg.ended_at?format(parseISO(seg.ended_at),'HH:mm'):'en cours'}
                     </div>
                   </div>
-                  <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text2)'}}>{fmtHM(dur)}</div>
+                  <div style={{fontSize:'13px',fontWeight:'700',color:'var(--text2)',fontFamily:'var(--mono)'}}>{fmtHM(dur)}</div>
                 </div>
               )
             })}
