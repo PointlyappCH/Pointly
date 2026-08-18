@@ -16,6 +16,10 @@ export default function AdminHome() {
   const [toast, setToast]   = useState('')
   const [showDepoint, setShowDepoint] = useState(false)
   const [remark, setRemark] = useState('')
+  const [showCodeModal, setShowCodeModal] = useState(false)
+  const [codeInput, setCodeInput] = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [checkingCode, setCheckingCode] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
@@ -65,14 +69,27 @@ export default function AdminHome() {
   const isWorking  = myLog?.punched_in && !myLog?.punched_out && !isPaused && !isError
   const isDone     = myLog?.punched_out
 
-  async function punch() {
+  function punch() {
     if (isError) { setShowDepoint(true); return }
     if (isDone) return
     if (isWorking || isPaused) { setShowDepoint(true); return }
+    setCodeInput(''); setCodeError(''); setShowCodeModal(true)
+  }
+
+  async function confirmCodeAndPunchIn() {
+    if (!profile || !company || checkingCode) return
+    if (!codeInput.trim()) { setCodeError('Entre le code affiché dans la cabane'); return }
+    setCheckingCode(true); setCodeError('')
+    const { data: validCode, error } = await supabase.rpc('get_or_create_today_code', { p_company_id: company.id })
+    if (error) { setCodeError('Erreur de vérification, réessaie'); setCheckingCode(false); return }
+    if (codeInput.trim() !== validCode) {
+      setCodeError('Code incorrect'); setCheckingCode(false); return
+    }
     await supabase.from('time_logs').upsert({
       user_id: profile.id, company_id: company.id, log_date: today,
       punched_in: new Date().toISOString(),
     }, { onConflict: 'user_id,log_date' })
+    setCheckingCode(false); setShowCodeModal(false); setCodeInput('')
     loadData(); showToast('Pointé ✅')
   }
 
@@ -238,6 +255,41 @@ export default function AdminHome() {
           <button className="btn btn-sm btn-g" onClick={()=>showToast('🔜 Notifications push — bientôt disponible')}>Notifier</button>
         </div>
       </div>
+
+      {/* MODAL CODE DE POINTAGE */}
+      {showCodeModal && (
+        <div className="modal-bg" onClick={()=>setShowCodeModal(false)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+            <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+              <div style={{width:'46px',height:'46px',borderRadius:'50%',background:'var(--blue-bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <i className="ti ti-shield-lock" style={{fontSize:'22px',color:'var(--blue)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'18px',fontWeight:'800'}}>Code de pointage</div>
+                <div style={{fontSize:'13px',color:'var(--text2)'}}>Le code affiché dans la cabane</div>
+              </div>
+            </div>
+            <input
+              className="if"
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="····"
+              autoFocus
+              value={codeInput}
+              onChange={e=>{ setCodeInput(e.target.value.replace(/\D/g,'')); setCodeError('') }}
+              onKeyDown={e=>{ if(e.key==='Enter') confirmCodeAndPunchIn() }}
+              style={{fontSize:'26px',textAlign:'center',letterSpacing:'.3em',fontWeight:'800',marginBottom:'8px'}}
+            />
+            {codeError && <div style={{color:'var(--red)',fontSize:'13px',marginBottom:'10px',textAlign:'center'}}>{codeError}</div>}
+            <button className="btn btn-p" onClick={confirmCodeAndPunchIn} disabled={checkingCode} style={{marginTop:'8px'}}>
+              <i className="ti ti-check"/>{checkingCode?'Vérification…':'Valider et pointer'}
+            </button>
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setShowCodeModal(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DEPOINT */}
       {showDepoint && (
