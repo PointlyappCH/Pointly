@@ -73,9 +73,9 @@ export default function EmpHome() {
 
   const workedMs   = getWorkedMs()
   const isError    = log?.punched_in && !log?.punched_out && (now - new Date(log.punched_in).getTime()) >= MAX_MS
-  const isPaused   = log?.pause_start && !log?.pause_end
-  const isWorking  = log?.punched_in && !log?.punched_out && !isPaused && !isError
   const isDone     = !!log?.punched_out
+  const isPaused   = !isDone && log?.pause_start && !log?.pause_end
+  const isWorking  = log?.punched_in && !log?.punched_out && !isPaused && !isError
 
   function punch() {
     if (!profile || !company) return
