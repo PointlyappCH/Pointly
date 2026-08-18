@@ -8,7 +8,7 @@ export default function AdminSettings() {
   const [toast, setToast]   = useState('')
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E'
+    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E', sectors_enabled: false
   })
   const [postes, setPostes] = useState([])
   const [newPoste, setNewPoste] = useState('')
@@ -23,6 +23,7 @@ export default function AdminSettings() {
         sector:      company.sector     || 'Restauration',
         pause_mode:  company.pause_mode || 'managed',
         brand_color: company.brand_color|| '#1A1A2E',
+        sectors_enabled: company.sectors_enabled || false,
       })
     }
     loadPostes()
@@ -39,7 +40,7 @@ export default function AdminSettings() {
     if (!company) return
     setLoading(true)
     const { error } = await supabase.from('companies')
-      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color })
+      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color, sectors_enabled: form.sectors_enabled })
       .eq('id', company.id)
     setLoading(false)
     if (error) { showToast('Erreur : '+error.message); return }
@@ -124,6 +125,29 @@ export default function AdminSettings() {
               <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}}>{o.sub}</div>
             </div>
           ))}
+        </div>
+
+        {/* Suivi par secteur */}
+        <div className="card">
+          <div className="card-title">Suivi par secteur</div>
+          <div onClick={()=>setForm(f=>({...f,sectors_enabled:!f.sectors_enabled}))}
+            style={{display:'flex',alignItems:'center',gap:'12px',cursor:'pointer',padding:'4px 0'}}>
+            <div style={{
+              width:'46px',height:'26px',borderRadius:'20px',flexShrink:0,position:'relative',
+              background:form.sectors_enabled?'var(--accent)':'var(--border)',transition:'background .15s'
+            }}>
+              <div style={{
+                width:'20px',height:'20px',borderRadius:'50%',background:'#fff',position:'absolute',top:'3px',
+                left:form.sectors_enabled?'23px':'3px',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.3)'
+              }}/>
+            </div>
+            <div>
+              <div style={{fontSize:'14px',fontWeight:'700'}}>Activer les secteurs/chantiers</div>
+              <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}}>
+                Permet à l'équipe de découper sa journée par secteur (ex: pistes, chantiers) pour faciliter la facturation. Le compteur d'heures continue de tourner normalement.
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Postes de travail */}
