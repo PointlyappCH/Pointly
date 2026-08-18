@@ -9,6 +9,7 @@ export default function AdminTeam() {
   const [postes, setPostes]   = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [editEmp, setEditEmp] = useState(null)
+  const [profileEmp, setProfileEmp] = useState(null)
   const [resetEmp, setResetEmp] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [newPwd, setNewPwd]   = useState('')
@@ -237,7 +238,7 @@ export default function AdminTeam() {
           )}
           {emps.map(e=>(
             <div key={e.id} className="card" style={{padding:'14px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px',cursor:'pointer'}} onClick={()=>setProfileEmp(e)}>
                 <div className="av" style={{width:'42px',height:'42px',fontSize:'13px',fontWeight:'700',background:e.color_bg||'#E6F1FB',color:e.color_fg||'#185FA5'}}>
                   {mkIni(e.full_name)}
                 </div>
@@ -245,7 +246,7 @@ export default function AdminTeam() {
                   <div style={{fontSize:'15px',fontWeight:'700'}}>{e.full_name}</div>
                   <div style={{fontSize:'12px',color:'var(--text2)'}}>{e.email}</div>
                 </div>
-                <button className="btn btn-s btn-sm" onClick={()=>openEdit(e)}><i className="ti ti-pencil"/></button>
+                <i className="ti ti-chevron-right" style={{color:'var(--text3)',fontSize:'18px'}}/>
               </div>
 
               <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'10px'}}>
@@ -341,6 +342,58 @@ export default function AdminTeam() {
           )}
         </>}
       </div>
+
+      {/* ── MODAL PROFIL DÉTAILLÉ ── */}
+      {profileEmp && (
+        <div className="modal-bg" onClick={()=>setProfileEmp(null)}>
+          <div className="ms" onClick={e=>e.stopPropagation()}>
+            <div className="mh"/>
+
+            {/* En-tête profil */}
+            <div style={{textAlign:'center',padding:'8px 0 16px'}}>
+              <div className="av" style={{width:'64px',height:'64px',fontSize:'20px',fontWeight:'800',background:profileEmp.color_bg||'#E6F1FB',color:profileEmp.color_fg||'#185FA5',margin:'0 auto 10px'}}>
+                {mkIni(profileEmp.full_name)}
+              </div>
+              <div style={{fontSize:'19px',fontWeight:'800'}}>{profileEmp.full_name}</div>
+              <div style={{fontSize:'13px',color:'var(--text2)',marginTop:'2px'}}>{profileEmp.email}</div>
+              <div style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',marginTop:'10px'}}>
+                <span className="badge bk">{profileEmp.poste||'—'}</span>
+                <span className="badge bb">{profileEmp.h_due||169}h/mois</span>
+                <span className="badge" style={{background:'var(--orange-bg)',color:'#7A4500'}}>{(profileEmp.vac_droit||20)-(profileEmp.vac_pris||0)} j vac.</span>
+                <span className="badge" style={{background:'#F0F0F8',color:'#555'}}>{cycleLbl(profileEmp.cycle)}</span>
+                {profileEmp.role==='moderator' && <span className="badge" style={{background:'var(--orange-bg)',color:'#7A4500'}}>Modérateur</span>}
+              </div>
+            </div>
+
+            {/* Menu d'actions */}
+            <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+              <button className="btn btn-s" style={{justifyContent:'flex-start',gap:'10px'}}
+                onClick={()=>{ openEdit(profileEmp); setProfileEmp(null) }}>
+                <i className="ti ti-pencil"/>Modifier les informations
+              </button>
+              <button className="btn btn-s" style={{justifyContent:'flex-start',gap:'10px'}}
+                onClick={()=>{ setResetEmp(profileEmp); setNewPwd(''); setProfileEmp(null) }}>
+                <i className="ti ti-key"/>Réinitialiser le mot de passe
+              </button>
+              <button className="btn btn-s" style={{justifyContent:'flex-start',gap:'10px'}}
+                onClick={()=>{ copyCredentials({name:profileEmp.full_name.split(' ')[0],email:profileEmp.email,pwd:'voir mot de passe'}); }}>
+                <i className="ti ti-share"/>Envoyer le lien d'invitation
+              </button>
+              <Link to="/admin/corrections" style={{textDecoration:'none'}} onClick={()=>setProfileEmp(null)}>
+                <button className="btn btn-s" style={{width:'100%',justifyContent:'flex-start',gap:'10px'}}>
+                  <i className="ti ti-clock-check"/>Voir / corriger ses heures
+                </button>
+              </Link>
+              <button className="btn btn-s" style={{justifyContent:'flex-start',gap:'10px',color:'var(--red)',borderColor:'var(--red-bg)'}}
+                onClick={()=>{ setConfirmDelete(profileEmp); setProfileEmp(null) }}>
+                <i className="ti ti-trash"/>Supprimer l'employé
+              </button>
+            </div>
+
+            <button className="btn btn-s" style={{marginTop:'12px'}} onClick={()=>setProfileEmp(null)}>Fermer</button>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL AJOUT ── */}
       {showAdd && (
