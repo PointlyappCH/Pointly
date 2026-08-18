@@ -235,7 +235,7 @@ export default function AdminHome() {
         <div style={{background:'var(--green-bg)',border:'1px solid #9FE1CB',borderRadius:'var(--rs)',padding:'12px 14px',display:'flex',alignItems:'center',gap:'10px'}}>
           <i className="ti ti-bell-ringing" style={{fontSize:'20px',color:'var(--green)',flexShrink:0}}/>
           <div style={{flex:1,fontSize:'13px',color:'#0A5E45',fontWeight:'600'}}>Planning prêt ? Notifiez l'équipe</div>
-          <button className="btn btn-sm btn-g" onClick={()=>showToast('Équipe notifiée ! 📲')}>Notifier</button>
+          <button className="btn btn-sm btn-g" onClick={()=>showToast('🔜 Notifications push — bientôt disponible')}>Notifier</button>
         </div>
       </div>
 
