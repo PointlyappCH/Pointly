@@ -27,9 +27,8 @@ export default function EmpChat() {
     loadMessages()
     const ch = supabase.channel('emp-chat-'+channel)
       .on('postgres_changes', { event:'INSERT', schema:'public', table:'chat_messages',
-        filter:`company_id=eq.${company?.id}` }, payload => {
-        setMessages(prev => [...prev, payload.new])
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 50)
+        filter:`company_id=eq.${company?.id}` }, () => {
+        loadMessages()
       }).subscribe()
     return () => supabase.removeChannel(ch)
   }, [company, channel])
