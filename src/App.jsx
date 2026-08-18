@@ -14,6 +14,7 @@ import AdminExport        from './pages/admin/Export'
 import AdminExchanges     from './pages/admin/Exchanges'
 import AdminSettings      from './pages/admin/Settings'
 import AdminToday         from './pages/admin/Today'
+import AdminStats         from './pages/admin/Stats'
 import EmpHome            from './pages/employee/Home'
 import EmpPlanning        from './pages/employee/Planning'
 import EmpDayView         from './pages/employee/DayView'
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/admin/exchanges"   element={<ProtectedRoute requireManager><AdminExchanges /></ProtectedRoute>} />
           <Route path="/admin/settings"    element={<ProtectedRoute requireManager><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/today"       element={<ProtectedRoute requireManager><AdminToday /></ProtectedRoute>} />
+          <Route path="/admin/stats"       element={<ProtectedRoute requireManager><AdminStats /></ProtectedRoute>} />
 
           {/* Admin SEULEMENT — export heures */}
           <Route path="/admin/export"      element={<ProtectedRoute requireAdmin><AdminExport /></ProtectedRoute>} />
