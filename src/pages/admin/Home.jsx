@@ -77,9 +77,9 @@ export default function AdminHome() {
 
   const workedMs   = getWorkedMs()
   const isError    = myLog?.punched_in && !myLog?.punched_out && (now - new Date(myLog.punched_in).getTime()) >= MAX_MS
-  const isPaused   = myLog?.pause_start && !myLog?.pause_end
+  const isDone     = !!myLog?.punched_out
+  const isPaused   = !isDone && myLog?.pause_start && !myLog?.pause_end
   const isWorking  = myLog?.punched_in && !myLog?.punched_out && !isPaused && !isError
-  const isDone     = myLog?.punched_out
 
   function punch() {
     if (isError) { setShowDepoint(true); return }
