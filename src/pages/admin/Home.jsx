@@ -323,6 +323,12 @@ export default function AdminHome() {
               <div style={{fontSize:'12px',fontWeight:'700'}}>Qui travaille ?</div>
             </div>
           </Link>
+          <Link to="/admin/stats" style={{textDecoration:'none'}}>
+            <div className="card" style={{textAlign:'center',padding:'16px',cursor:'pointer'}}>
+              <i className="ti ti-chart-bar" style={{fontSize:'26px',color:'var(--blue)',display:'block',marginBottom:'6px'}}/>
+              <div style={{fontSize:'12px',fontWeight:'700'}}>Statistiques</div>
+            </div>
+          </Link>
           <Link to={`/admin/day?date=${format(new Date(),'yyyy-MM-dd')}`} style={{textDecoration:'none'}}>
             <div className="card" style={{textAlign:'center',padding:'16px',cursor:'pointer',border:'1.5px solid var(--blue)'}}>
               <i className="ti ti-timeline" style={{fontSize:'26px',color:'var(--blue)',display:'block',marginBottom:'6px'}}/>
