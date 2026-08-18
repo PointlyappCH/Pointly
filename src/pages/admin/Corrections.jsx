@@ -27,7 +27,7 @@ export default function AdminCorrections() {
     if (!company) return
     // Logs du jour sélectionné (par défaut aujourd'hui) avec erreurs ou incomplets
     const { data: l } = await supabase.from('time_logs')
-      .select('*, profiles(full_name,color_bg,color_fg)')
+      .select('*, profiles!time_logs_user_id_fkey(full_name,color_bg,color_fg)')
       .eq('company_id', company.id)
       .eq('log_date', dateKey)
       .order('created_at')
@@ -44,7 +44,7 @@ export default function AdminCorrections() {
     const start = format(startOfMonth(empMonthCursor),'yyyy-MM-dd')
     const end   = format(endOfMonth(empMonthCursor),'yyyy-MM-dd')
     const { data } = await supabase.from('time_logs')
-      .select('*, profiles(full_name,color_bg,color_fg)')
+      .select('*, profiles!time_logs_user_id_fkey(full_name,color_bg,color_fg)')
       .eq('company_id', company.id)
       .eq('user_id', selEmpId)
       .gte('log_date', start).lte('log_date', end)
@@ -351,7 +351,7 @@ export default function AdminCorrections() {
             {modified.map(log => {
               const p = log.profiles
               return (
-                <div key={log.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 0',borderBottom:'1px solid var(--border)',background:'#FFFBF0',borderRadius:'var(--rs)',padding:'8px 10px',marginBottom:'4px'}}>
+                <div key={log.id} style={{display:'flex',alignItems:'center',gap:'10px',borderBottom:'1px solid var(--border)',background:'#FFFBF0',borderRadius:'var(--rs)',padding:'8px 10px',marginBottom:'4px'}}>
                   <div className="av" style={{width:'34px',height:'34px',fontSize:'11px',background:p?.color_bg||'#FAEEDA',color:p?.color_fg||'#7A4500'}}>{mkIni(p?.full_name)}</div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:'14px',fontWeight:'700'}}>{p?.full_name}</div>

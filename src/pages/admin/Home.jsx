@@ -35,9 +35,9 @@ export default function AdminHome() {
   async function loadData() {
     if (!company || !profile) return
     const [{ data: s }, { data: l }, { data: ml }] = await Promise.all([
-      supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg,poste)')
+      supabase.from('shifts').select('*, profiles!shifts_user_id_fkey(full_name,color_bg,color_fg,poste)')
         .eq('company_id', company.id).eq('shift_date', today),
-      supabase.from('time_logs').select('*, profiles(full_name,color_bg,color_fg)')
+      supabase.from('time_logs').select('*, profiles!time_logs_user_id_fkey(full_name,color_bg,color_fg)')
         .eq('company_id', company.id).eq('log_date', today),
       supabase.from('time_logs').select('*')
         .eq('user_id', profile.id).eq('log_date', today).maybeSingle(),

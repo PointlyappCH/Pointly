@@ -57,7 +57,7 @@ export default function DayView() {
   async function load() {
     if (!company?.id) return
     const [{ data:s },{ data:l },{ data:e },{ data:p },{ data:n },{ data:t }] = await Promise.all([
-      supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)').eq('company_id',company.id).eq('shift_date',dateParam),
+      supabase.from('shifts').select('*, profiles!shifts_user_id_fkey(full_name,color_bg,color_fg)').eq('company_id',company.id).eq('shift_date',dateParam),
       supabase.from('time_logs').select('*').eq('company_id',company.id).eq('log_date',dateParam),
       supabase.from('profiles').select('*').eq('company_id',company.id).order('full_name'),
       supabase.from('postes').select('*').eq('company_id',company.id).order('name'),

@@ -13,8 +13,26 @@ export default function AdminToday() {
   const [logs, setLogs]     = useState([])
   const [filter, setFilter] = useState('all') // all | working | absent | late
   const [now, setNow]       = useState(Date.now())
+  const [dailyCode, setDailyCode] = useState(null)
+  const [regenerating, setRegenerating] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  async function loadDailyCode() {
+    if (!company) return
+    const { data, error } = await supabase.rpc('get_or_create_today_code', { p_company_id: company.id })
+    if (!error) setDailyCode(data)
+  }
+
+  async function regenerateCode() {
+    if (!company || regenerating) return
+    setRegenerating(true)
+    const { data, error } = await supabase.rpc('generate_daily_code', {
+      p_company_id: company.id, p_manual: true, p_admin_id: null,
+    })
+    if (!error) setDailyCode(data)
+    setRegenerating(false)
+  }
 
   function mkIni(n=''){ const p=n.trim().split(' '); return((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase() }
   function fmtTime(ts){ if(!ts)return'—'; return format(parseISO(ts),'HH:mm') }
@@ -34,6 +52,7 @@ export default function AdminToday() {
 
   useEffect(() => {
     load()
+    loadDailyCode()
     const interval = setInterval(() => { setNow(Date.now()); load() }, 30000)
     const ch = supabase.channel('today-live')
       .on('postgres_changes',{event:'*',schema:'public',table:'time_logs'},load)
@@ -113,6 +132,20 @@ export default function AdminToday() {
       <div className="content">
         <div style={{fontSize:'14px',color:'var(--text2)',fontWeight:'500'}}>
           {format(new Date(),'EEEE d MMMM yyyy',{locale:fr})}
+        </div>
+
+        {/* Code du jour */}
+        <div className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',padding:'14px 16px'}}>
+          <div>
+            <div style={{fontSize:'11px',color:'var(--text2)',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.03em'}}>Code du jour</div>
+            <div style={{fontSize:'28px',fontWeight:'800',letterSpacing:'.08em',fontVariantNumeric:'tabular-nums'}}>
+              {dailyCode || '····'}
+            </div>
+            <div style={{fontSize:'11px',color:'var(--text3)'}}>À afficher dans la cabane pour le pointage</div>
+          </div>
+          <button className="btn btn-sm btn-o" onClick={regenerateCode} disabled={regenerating}>
+            <i className="ti ti-refresh"/>{regenerating ? '...' : 'Régénérer'}
+          </button>
         </div>
 
         {/* Stats rapides */}

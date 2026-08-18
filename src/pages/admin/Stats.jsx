@@ -44,7 +44,7 @@ export default function AdminStats() {
     setLoading(true)
     const [{ data: e }, { data: l }] = await Promise.all([
       supabase.from('profiles').select('*').eq('company_id', company.id).eq('role','employee').order('full_name'),
-      supabase.from('time_logs').select('*, profiles(full_name,color_bg,color_fg)')
+      supabase.from('time_logs').select('*, profiles!time_logs_user_id_fkey(full_name,color_bg,color_fg)')
         .eq('company_id', company.id)
         .gte('log_date', rangeStartKey).lte('log_date', rangeEndKey),
     ])
@@ -112,19 +112,6 @@ export default function AdminStats() {
     return Object.entries(map).map(([name,value])=>({ name, value: +value.toFixed(2) }))
       .sort((a,b)=>b.value-a.value)
   }, [periodSegments])
-
-  function monthlyTotalsForSector(segs, sector) {
-    const months = eachMonthOfInterval({ start: startOfYear(segs[0]?new Date(segs[0].started_at):new Date()), end: endOfYear(segs[0]?new Date(segs[0].started_at):new Date()) })
-    // On construit toujours les 12 mois de l'année, peu importe les données
-    const year = segs.length ? new Date(segs[0].started_at).getFullYear() : new Date().getFullYear()
-    const allMonths = eachMonthOfInterval({ start: new Date(year,0,1), end: new Date(year,11,1) })
-    return allMonths.map(m => {
-      const total = segs
-        .filter(s => s.ended_at && isSameMonth(new Date(s.started_at), m) && (sector==='all' || s.sector===sector))
-        .reduce((a,s)=>a+(new Date(s.ended_at)-new Date(s.started_at))/3600000, 0)
-      return { month: format(m,'MMM',{locale:fr}), hours: +total.toFixed(1) }
-    })
-  }
 
   const dataA = useMemo(() => {
     const allMonths = eachMonthOfInterval({ start: new Date(yearA,0,1), end: new Date(yearA,11,1) })

@@ -38,7 +38,7 @@ export default function AdminPlanning() {
     const fmt = d => format(d,'yyyy-MM-dd')
 
     const [{ data:s },{ data:d },{ data:n },{ data:e },{ data:p }] = await Promise.all([
-      supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)')
+      supabase.from('shifts').select('*, profiles!shifts_user_id_fkey(full_name,color_bg,color_fg)')
         .eq('company_id',company.id).gte('shift_date',fmt(start)).lte('shift_date',fmt(end)),
       supabase.from('dispos').select('*, profiles(full_name)')
         .eq('company_id', company.id)

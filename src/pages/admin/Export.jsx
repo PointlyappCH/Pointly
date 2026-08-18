@@ -43,7 +43,7 @@ export default function AdminExport() {
 
     const [{ data: e }, { data: l }] = await Promise.all([
       supabase.from('profiles').select('*').eq('company_id', company.id).eq('role','employee').order('full_name'),
-      supabase.from('time_logs').select('*, profiles(full_name)')
+      supabase.from('time_logs').select('*, profiles!time_logs_user_id_fkey(full_name)')
         .eq('company_id', company.id)
         .gte('log_date', fmt(start)).lte('log_date', fmt(end)),
     ])
