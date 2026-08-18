@@ -10,6 +10,7 @@ export default function AdminProfile() {
 
   const shortcuts = [
     { to:'/admin/today',       icon:'ti-users',          color:'var(--green-bg)',  ic:'var(--green)',  title:"Qui travaille aujourd'hui", sub:'Vue live de l\'équipe', show:true },
+    { to:'/admin/stats',       icon:'ti-chart-bar',      color:'var(--blue-bg)',   ic:'var(--blue)',   title:'Statistiques',              sub:'Heures, présence, secteurs', show:true },
     { to:'/admin/corrections', icon:'ti-pencil',         color:'var(--red-bg)',    ic:'var(--red)',    title:'Corrections d\'heures',     sub:'Corriger les pointages', show:true },
     { to:'/admin/export',      icon:'ti-file-type-pdf',  color:'var(--red-bg)',    ic:'var(--red)',    title:'Export PDF officiel',       sub:'Feuille d\'heures mensuelle', show:canExport },
     { to:'/admin/exchanges',   icon:'ti-arrows-exchange',color:'var(--orange-bg)', ic:'var(--orange)', title:'Échanges d\'horaires',      sub:'Valider les demandes', show:true },
