@@ -73,11 +73,23 @@ export default function AdminTeam() {
     const { data, error } = await supabase.functions.invoke('reset-employee-password', {
       body: { targetUserId: resetEmp.id, newPassword: newPwd },
     })
-    if (error || data?.error) {
-      showToast('Erreur : ' + (data?.error || error.message))
+
+    // Récupère le vrai message d'erreur renvoyé par la fonction serveur
+    let errMsg = null
+    if (data?.error) errMsg = data.error
+    else if (error) {
+      try {
+        const ctx = await error.context?.json?.()
+        errMsg = ctx?.error || error.message
+      } catch { errMsg = error.message }
+    }
+
+    if (errMsg) {
+      showToast('Erreur : ' + errMsg)
       setLoading(false)
       return
     }
+
     setInviteEmp({ name:resetEmp.full_name, email:resetEmp.email, pwd:newPwd })
     setResetEmp(null); setNewPwd('')
     showToast('Mot de passe réinitialisé ✅')
@@ -142,6 +154,10 @@ export default function AdminTeam() {
   }
 
   function copyCredentials(emp) {
+    if (!emp.pwd || emp.pwd === 'voir mot de passe') {
+      copyToClipboard(`Bonjour ${emp.name} 👋\n\nVoici ton accès à Pointly :\n🔗 App : ${appUrl}\n📧 Email : ${emp.email}\n\n⚠️ Pour le mot de passe, utilise "Réinitialiser" dans la fiche employé afin d'en générer un nouveau à lui transmettre.`)
+      return
+    }
     copyToClipboard(`Bonjour ${emp.name} 👋\n\nVoici ton accès à Pointly :\n🔗 App : ${appUrl}\n📧 Email : ${emp.email}\n🔑 Mot de passe : ${emp.pwd}\n\nConnecte-toi et commence à pointer !`)
   }
 
