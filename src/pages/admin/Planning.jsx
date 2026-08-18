@@ -41,6 +41,7 @@ export default function AdminPlanning() {
       supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)')
         .eq('company_id',company.id).gte('shift_date',fmt(start)).lte('shift_date',fmt(end)),
       supabase.from('dispos').select('*, profiles(full_name)')
+        .eq('company_id', company.id)
         .gte('dispo_date',fmt(start)).lte('dispo_date',fmt(end)),
       supabase.from('day_notes').select('*')
         .eq('company_id',company.id).gte('note_date',fmt(start)).lte('note_date',fmt(end)),
@@ -91,6 +92,24 @@ export default function AdminPlanning() {
       content:noteForm.content, color:noteForm.color, created_by:profile.id,
     },{ onConflict:'company_id,note_date' })
     loadData(); setModalNote(null); showToast('Note enregistrée ✅')
+  }
+
+  async function saveQuickTask() {
+    if (!quickTask || !taskForm.title.trim() || !taskForm.userId) return
+    const { error } = await supabase.from('shift_tasks').insert({
+      company_id: company.id,
+      user_id: taskForm.userId,
+      task_date: format(quickTask.date, 'yyyy-MM-dd'),
+      task_time: taskForm.time,
+      title: taskForm.title.trim(),
+      color: taskForm.color,
+      created_by: profile.id,
+    })
+    if (error) { showToast('Erreur : ' + error.message); return }
+    setQuickTask(null)
+    setTaskForm({ userId: '', time: '09:00', title: '', color: '#185FA5' })
+    loadData()
+    showToast('Tâche ajoutée ✅')
   }
 
   function openDay(date) {
