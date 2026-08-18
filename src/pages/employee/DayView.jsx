@@ -31,7 +31,7 @@ export default function EmpDayView() {
   async function load() {
     if (!profile || !company) return
     const [{ data:s },{ data:l },{ data:t },{ data:n },{ data:ts }] = await Promise.all([
-      supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)')
+      supabase.from('shifts').select('*, profiles!shifts_user_id_fkey(full_name,color_bg,color_fg)')
         .eq('user_id', profile.id).eq('shift_date', dateParam).maybeSingle(),
       supabase.from('time_logs').select('*')
         .eq('user_id', profile.id).eq('log_date', dateParam).maybeSingle(),
@@ -39,7 +39,7 @@ export default function EmpDayView() {
         .eq('user_id', profile.id).eq('task_date', dateParam).order('task_time'),
       supabase.from('day_notes').select('*')
         .eq('company_id', company.id).eq('note_date', dateParam).maybeSingle(),
-      supabase.from('shifts').select('*, profiles(full_name,color_bg,color_fg)')
+      supabase.from('shifts').select('*, profiles!shifts_user_id_fkey(full_name,color_bg,color_fg)')
         .eq('company_id', company.id).eq('shift_date', dateParam)
         .neq('user_id', profile.id),
     ])
