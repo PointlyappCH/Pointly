@@ -209,7 +209,7 @@ export default function AdminStats() {
                 <div style={{width:'100%',height:260}}>
                   <ResponsiveContainer>
                     <PieChart>
-                      <Pie data={sectorPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+                      <Pie data={sectorPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}
                         label={({name,value})=>`${name} · ${fmtH(value)}`}>
                         {sectorPie.map((entry,i)=><Cell key={entry.name} fill={PALETTE[i%PALETTE.length]}/>)}
                       </Pie>

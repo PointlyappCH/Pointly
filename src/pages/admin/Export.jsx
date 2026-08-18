@@ -104,7 +104,7 @@ export default function AdminExport() {
           doc.setTextColor(...BLUE); doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.text(lbl,x,29)
           doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(val,x,34)
         })
-        const inf2=[['H. dues/mois',fmtH(emp.h_due||169)+'h'],['Vacances droit',(emp.vac_droit||20)+' j'],['Vacances pris',(emp.vac_pris||0)+' j'],['Vacances rest.',((emp.vac_droit||20)-(emp.vac_pris||0))+' j']]
+        const inf2=[['H. dues/mois',fmtH(emp.h_due||169)],['Vacances droit',(emp.vac_droit||20)+' j'],['Vacances pris',(emp.vac_pris||0)+' j'],['Vacances rest.',((emp.vac_droit||20)-(emp.vac_pris||0))+' j']]
         inf2.forEach(([lbl,val],i) => {
           const x=lm+i*cw4+3
           doc.setTextColor(100,100,130); doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.text(lbl,x,37.5)
@@ -154,8 +154,8 @@ export default function AdminExport() {
         const sBg=hSupp>=0?GREEN_BG:RED_BG; const sFg=hSupp>=0?GREEN:RED
         const cw6=uw/6
         const ri=[
-          {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet)+'h',bg:GREEN_BG,fg:GREEN},
-          {l:'HEURES DUES',v:fmtH(hDue)+'h',bg:BLUE_BG,fg:BLUE},
+          {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
+          {l:'HEURES DUES',v:fmtH(hDue),bg:BLUE_BG,fg:BLUE},
           {l:'H. SUPP.',v:(hSupp>=0?'+':'')+hSupp.toFixed(2)+'h',bg:sBg,fg:sFg},
           {l:'VAC. RESTANTES',v:((emp.vac_droit||20)-(emp.vac_pris||0))+' j',bg:ORANGE_BG,fg:[239,159,39]},
           {l:'JOURS TRAVAILLÉS',v:workedDays+' j',bg:[245,245,250],fg:DARK},
@@ -203,8 +203,8 @@ export default function AdminExport() {
         const hDue = emp.h_due||169
         return [emp.full_name, mkIni(emp.full_name), emp.poste||'—',
           emp.contract==='heure'?'À l\'heure':'Fixe',
-          fmtH(total)+'h', fmtH(hDue)+'h',
-          (total-hDue>=0?'+':'')+fmtH(Math.abs(total-hDue))+'h',
+          fmtH(total), fmtH(hDue),
+          (total-hDue>=0?'+':'')+fmtH(Math.abs(total-hDue)),
           (emp.vac_droit||20)+' j', (emp.vac_pris||0)+' j',
           ((emp.vac_droit||20)-(emp.vac_pris||0))+' j']
       })
@@ -283,16 +283,16 @@ export default function AdminExport() {
                   <div style={{fontSize:'12px',color:'var(--text2)'}}>{emp.poste}</div>
                 </div>
                 <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:'15px',fontWeight:'800'}}>{fmtH(emp.total)}h</div>
+                  <div style={{fontSize:'15px',fontWeight:'800'}}>{fmtH(emp.total)}</div>
                   <div style={{fontSize:'11px',fontWeight:'700',color:emp.supp>=0?'var(--green)':'var(--red)'}}>
-                    {emp.supp>=0?'+':''}{fmtH(Math.abs(emp.supp))}h supp.
+                    {emp.supp>=0?'+':''}{fmtH(Math.abs(emp.supp))} supp.
                   </div>
                 </div>
               </div>
             ))}
             <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',marginTop:'4px'}}>
               <span style={{fontSize:'14px',color:'var(--text2)'}}>Total équipe</span>
-              <span style={{fontSize:'18px',fontWeight:'800'}}>{fmtH(summaries.reduce((a,e)=>a+e.total,0))}h</span>
+              <span style={{fontSize:'18px',fontWeight:'800'}}>{fmtH(summaries.reduce((a,e)=>a+e.total,0))}</span>
             </div>
           </div>
         )}
