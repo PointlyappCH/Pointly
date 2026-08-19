@@ -79,10 +79,10 @@ export default function EmpHome() {
 
   function punch() {
     if (!profile || !company) return
-    if (isError || isDone) { setShowDepoint(true); return }
+    if (isError) { setShowDepoint(true); return }
     if (isWorking || isPaused) { setShowDepoint(true); return }
     // Démarrage d'une journée : on demande d'abord le code affiché dans la cabane
-    setCodeInput(''); setCodeError(''); setShowCodeModal(true)
+    setCodeInput(''); setCodeError(''); setStartSector(''); setShowCodeModal(true)
   }
 
   async function confirmCodeAndPunchIn() {
@@ -97,6 +97,8 @@ export default function EmpHome() {
     const { data: newLog, error: insErr } = await supabase.from('time_logs').upsert({
       user_id: profile.id, company_id: company.id,
       log_date: today, punched_in: new Date().toISOString(),
+      punched_out: null, net_hours: null, error_24h: false,
+      pause_start: null, pause_end: null,
     }, { onConflict: 'user_id,log_date' }).select().single()
 
     if (!insErr && newLog && company.sectors_enabled) {
@@ -254,9 +256,19 @@ export default function EmpHome() {
           )}
 
           {/* Action principale */}
-          {!isWorking && !isPaused && !isDone && (
+          {!isWorking && !isPaused && !isDone && !isError && (
             <button className="punch-cta punch-cta-start" onClick={punch}>
               <i className="ti ti-player-play"/>Pointer
+            </button>
+          )}
+          {isDone && (
+            <button className="punch-cta punch-cta-start" onClick={()=>{ setCodeInput(''); setCodeError(''); setStartSector(''); setShowCodeModal(true) }}>
+              <i className="ti ti-player-play"/>Repointer
+            </button>
+          )}
+          {isError && (
+            <button className="punch-cta punch-cta-stop" onClick={()=>setShowDepoint(true)}>
+              <i className="ti ti-pencil"/>Corriger
             </button>
           )}
           {(isWorking||isPaused) && (
