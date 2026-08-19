@@ -83,9 +83,9 @@ export default function AdminHome() {
 
   function punch() {
     if (isError) { setShowDepoint(true); return }
-    if (isDone) return
     if (isWorking || isPaused) { setShowDepoint(true); return }
-    setCodeInput(''); setCodeError(''); setShowCodeModal(true)
+    // Repointage possible après une journée terminée
+    setCodeInput(''); setCodeError(''); setStartSector(''); setShowCodeModal(true)
   }
 
   async function confirmCodeAndPunchIn() {
@@ -100,6 +100,8 @@ export default function AdminHome() {
     const { data: newLog, error: insErr } = await supabase.from('time_logs').upsert({
       user_id: profile.id, company_id: company.id, log_date: today,
       punched_in: new Date().toISOString(),
+      punched_out: null, net_hours: null, error_24h: false,
+      pause_start: null, pause_end: null,
     }, { onConflict: 'user_id,log_date' }).select().single()
 
     if (!insErr && newLog && company.sectors_enabled) {
@@ -173,9 +175,9 @@ export default function AdminHome() {
   // Statut UI punch
   let circleClass='pc', icon='ti-clock', label='Pointer'
   if (isError)    { circleClass='pc error'; icon='ti-alert-triangle'; label='Erreur 24h' }
-  else if (isDone)   { circleClass='pc done';  icon='ti-check';           label='Terminé' }
-  else if (isPaused) { circleClass='pc ps';    icon='ti-player-pause';    label='En pause' }
-  else if (isWorking){ circleClass='pc in';    icon='ti-clock-check';     label='En cours' }
+  else if (isDone)   { circleClass='pc done';  icon='ti-player-play';    label='Repointer' }
+  else if (isPaused) { circleClass='pc ps';    icon='ti-player-pause';   label='En pause' }
+  else if (isWorking){ circleClass='pc in';    icon='ti-clock-check';    label='En cours' }
 
   const pointed = logs.filter(l=>l.punched_in&&!l.punched_out).length
   const errors  = logs.filter(l=>l.error_24h).length
