@@ -25,6 +25,8 @@ export default function EmpHome() {
   const [showSectorModal, setShowSectorModal] = useState(false)
   const [sectorInput, setSectorInput] = useState('')
   const [savingSector, setSavingSector] = useState(false)
+  const [zones, setZones] = useState([])
+  const [freeInput, setFreeInput] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const dateLabel = format(new Date(), "EEEE d MMMM", { locale: fr })
@@ -58,6 +60,18 @@ export default function EmpHome() {
       .subscribe()
     return () => { clearInterval(iv); supabase.removeChannel(ch) }
   }, [profile, company])
+
+  // Liste des secteurs proposés
+  useEffect(() => {
+    if (!company?.sectors_enabled) return
+    supabase.from('sectors').select('*')
+      .eq('company_id', company.id)
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setZones(data || []))
+  }, [company])
+
+  const canTypeFree = company?.sector_input_mode !== 'locked'
 
   function getWorkedMs() {
     if (!log?.punched_in) return 0
@@ -102,9 +116,14 @@ export default function EmpHome() {
     }, { onConflict: 'user_id,log_date' }).select().single()
 
     if (!insErr && newLog && company.sectors_enabled) {
+      const { data: resolved } = await supabase.rpc('resolve_sector', {
+        p_company_id: company.id,
+        p_name: startSector.trim() || 'Général',
+        p_mark_pending: company.sector_input_mode === 'validated',
+      })
       await supabase.from('shift_segments').insert({
         time_log_id: newLog.id, company_id: company.id, user_id: profile.id,
-        sector: startSector.trim() || 'Général',
+        sector: resolved || startSector.trim() || 'Général',
         started_at: new Date().toISOString(),
       })
     }
@@ -143,13 +162,18 @@ export default function EmpHome() {
     if (!log || !sectorInput.trim() || savingSector) return
     setSavingSector(true)
     const now = new Date().toISOString()
+    const { data: resolved } = await supabase.rpc('resolve_sector', {
+      p_company_id: company.id,
+      p_name: sectorInput.trim(),
+      p_mark_pending: company.sector_input_mode === 'validated',
+    })
     const open = currentOpenSegment()
     if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
     await supabase.from('shift_segments').insert({
       time_log_id: log.id, company_id: company.id, user_id: profile.id,
-      sector: sectorInput.trim(), started_at: now,
+      sector: resolved || sectorInput.trim(), started_at: now,
     })
-    setSavingSector(false); setShowSectorModal(false); setSectorInput('')
+    setSavingSector(false); setShowSectorModal(false); setSectorInput(''); setFreeInput(false)
     loadLog(); showToast('Secteur changé ✅')
   }
 
@@ -371,9 +395,27 @@ export default function EmpHome() {
             />
             {codeError && <div style={{color:'var(--red)',fontSize:'13px',marginBottom:'10px',textAlign:'center'}}>{codeError}</div>}
             {company?.sectors_enabled && (
-              <div className="iw" style={{marginBottom:'8px'}}>
-                <div className="il">Secteur de départ (optionnel)</div>
-                <input className="if" value={startSector} onChange={e=>setStartSector(e.target.value)} placeholder="Ex: Piste 3, Chantier Nord…"/>
+              <div style={{marginBottom:'10px'}}>
+                <div className="il" style={{marginBottom:'7px'}}>Secteur de départ (optionnel)</div>
+                {zones.length > 0 && !freeInput && (
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'7px',marginBottom:'8px'}}>
+                    {zones.map(z=>(
+                      <button key={z.id} onClick={()=>setStartSector(startSector===z.name?'':z.name)}
+                        style={{border:`1.5px solid ${startSector===z.name?'var(--accent)':'var(--border)'}`,background:startSector===z.name?'var(--accent)':'var(--surface)',color:startSector===z.name?'#fff':'var(--text)',borderRadius:'10px',padding:'10px 13px',fontSize:'14px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit'}}>
+                        {z.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(freeInput || zones.length === 0) && (
+                  <input className="if" value={startSector} onChange={e=>setStartSector(e.target.value)} placeholder="Ex: Piste 3, Chantier Nord…"/>
+                )}
+                {canTypeFree && zones.length > 0 && (
+                  <button className="btn btn-s btn-sm" onClick={()=>{ setFreeInput(!freeInput); setStartSector('') }}>
+                    <i className={`ti ${freeInput?'ti-list':'ti-plus'}`}/>
+                    {freeInput ? 'Choisir dans la liste' : 'Autre secteur'}
+                  </button>
+                )}
               </div>
             )}
             <button className="btn btn-p" onClick={confirmCodeAndPunchIn} disabled={checkingCode} style={{marginTop:'8px'}}>
@@ -398,16 +440,45 @@ export default function EmpHome() {
                 <div style={{fontSize:'13px',color:'var(--text2)'}}>Le compteur continue de tourner</div>
               </div>
             </div>
-            <div className="iw" style={{marginBottom:'16px'}}>
-              <div className="il">Nouveau secteur</div>
-              <input className="if" autoFocus value={sectorInput} onChange={e=>setSectorInput(e.target.value)}
-                onKeyDown={e=>{ if(e.key==='Enter') changeSector() }}
-                placeholder="Ex: Piste 3, Chantier Nord…"/>
-            </div>
-            <button className="btn btn-p" onClick={changeSector} disabled={!sectorInput.trim()||savingSector}>
-              <i className="ti ti-check"/>{savingSector?'…':'Confirmer le changement'}
-            </button>
-            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setShowSectorModal(false)}>Annuler</button>
+            {/* Choix rapide dans la liste */}
+            {zones.length > 0 && !freeInput && (
+              <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}}>
+                {zones.map(z=>(
+                  <button key={z.id}
+                    onClick={()=>{ setSectorInput(z.name); setTimeout(changeSector, 0) }}
+                    disabled={savingSector}
+                    style={{border:'1.5px solid var(--border)',background:'var(--surface)',borderRadius:'12px',padding:'13px 16px',fontSize:'15px',fontWeight:'700',color:'var(--text)',cursor:'pointer',fontFamily:'inherit'}}>
+                    {z.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Saisie libre */}
+            {(freeInput || zones.length === 0) && (
+              <div className="iw" style={{marginBottom:'14px'}}>
+                <div className="il">Nom du secteur</div>
+                <input className="if" autoFocus value={sectorInput} onChange={e=>setSectorInput(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter') changeSector() }}
+                  placeholder="Ex: Piste 3, Chantier Nord…"/>
+              </div>
+            )}
+
+            {/* Basculer entre liste et saisie libre */}
+            {canTypeFree && zones.length > 0 && (
+              <button className="btn btn-s btn-sm" style={{marginBottom:'12px'}}
+                onClick={()=>{ setFreeInput(!freeInput); setSectorInput('') }}>
+                <i className={`ti ${freeInput?'ti-list':'ti-plus'}`}/>
+                {freeInput ? 'Choisir dans la liste' : 'Autre secteur'}
+              </button>
+            )}
+
+            {(freeInput || zones.length === 0) && (
+              <button className="btn btn-p" onClick={changeSector} disabled={!sectorInput.trim()||savingSector}>
+                <i className="ti ti-check"/>{savingSector?'…':'Confirmer le changement'}
+              </button>
+            )}
+            <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>{ setShowSectorModal(false); setFreeInput(false) }}>Annuler</button>
           </div>
         </div>
       )}
