@@ -1,3 +1,4 @@
+import SetPassword from './pages/SetPassword'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
 
           {/* Admin + Modérateur */}
+          <Route path="/set-password"      element={<SetPassword />} /> 
           <Route path="/admin"             element={<ProtectedRoute requireManager><AdminHome /></ProtectedRoute>} />
           <Route path="/admin/planning"    element={<ProtectedRoute requireManager><AdminPlanning /></ProtectedRoute>} />
           <Route path="/admin/day"         element={<ProtectedRoute requireManager><AdminDayView /></ProtectedRoute>} />
