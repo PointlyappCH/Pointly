@@ -58,7 +58,7 @@ export function AuthProvider({ children }) {
     if (coErr) throw coErr
     const { error: profErr } = await supabase.from('profiles').upsert({
       id: authData.user.id, company_id: co.id, full_name: fullName,
-      role: 'admin', poste: 'Administrateur',
+      email, role: 'admin', poste: 'Administrateur',
     })
     if (profErr) throw profErr
     await loadProfile(authData.user.id)
@@ -67,22 +67,23 @@ export function AuthProvider({ children }) {
 
   async function addEmployee({ fullName, email, password, poste, contract, hDue, vacDroit, cycle, role='employee' }) {
     if (!company) throw new Error('Pas de société')
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email, password, options: { data: { full_name: fullName } }
+    // Passe par une fonction serveur : créer le compte depuis le navigateur
+    // écraserait la session de l'admin connecté.
+    const { data, error } = await supabase.functions.invoke('create-employee', {
+      body: { fullName, email, password, poste, contract, hDue, vacDroit, cycle, role },
     })
-    if (authErr) throw authErr
-    const colors = [
-      ['#E6F1FB','#185FA5'],['#E1F5EE','#0A5E45'],['#FAEEDA','#7A4500'],
-      ['#EEEDFE','#534AB7'],['#FCEBEB','#8B1F1F'],['#FFF0E6','#8B4500'],
-    ]
-    const c = colors[Math.floor(Math.random() * colors.length)]
-    const { error: profErr } = await supabase.from('profiles').upsert({
-      id: authData.user.id, company_id: company.id, full_name: fullName,
-      role, poste, contract, h_due: hDue, vac_droit: vacDroit,
-      vac_pris: 0, cycle, color_bg: c[0], color_fg: c[1],
-    })
-    if (profErr) throw profErr
-    return authData
+
+    let errMsg = null
+    if (data?.error) errMsg = data.error
+    else if (error) {
+      try {
+        const ctx = await error.context?.json?.()
+        errMsg = ctx?.error || error.message
+      } catch { errMsg = error.message }
+    }
+    if (errMsg) throw new Error(errMsg)
+
+    return data
   }
 
   async function updateEmployee(profileId, updates) {
