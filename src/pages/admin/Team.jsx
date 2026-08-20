@@ -21,7 +21,7 @@ export default function AdminTeam() {
   const [newPoste, setNewPoste] = useState('')
 
   const appUrl = window.location.origin
-  const emptyForm = { name:'', email:'', pwd:'', poste:'', contract:'fixe', hDue:169, vacDroit:20, vacPris:0, cycle:'1-1', role:'employee' }
+  const emptyForm = { name:'', email:'', pwd:'', poste:'', contract:'fixe', hDue:169, vacDroit:20, vacPris:0, cycle:'1-1', role:'employee', hireDate:'', endDate:'' }
   const [form, setForm] = useState(emptyForm)
 
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
@@ -45,7 +45,7 @@ export default function AdminTeam() {
     try {
       await addEmployee({ fullName:form.name, email:form.email, password:form.pwd,
         poste:form.poste||postes[0]?.name||'Employé', contract:form.contract,
-        hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle, role:form.role||'employee' })
+        hDue:Number(form.hDue), vacDroit:Number(form.vacDroit), cycle:form.cycle, role:form.role||'employee', hireDate:form.hireDate||null })
       // Ouvrir le modal d'invitation
       setInviteEmp({ name:form.name, email:form.email, pwd:form.pwd })
       setShowAdd(false); setForm(emptyForm); loadAll()
@@ -60,6 +60,7 @@ export default function AdminTeam() {
         full_name: form.name, poste: form.poste,
         contract: form.contract, h_due: Number(form.hDue),
         vac_droit: Number(form.vacDroit), vac_pris: Number(form.vacPris), cycle: form.cycle,
+        hire_date: form.hireDate||null, end_date: form.endDate||null,
       })
       showToast('Mis à jour ✅'); setEditEmp(null); loadAll()
     } catch(e){ setErr(e.message) }
@@ -99,7 +100,8 @@ export default function AdminTeam() {
   function openEdit(e) {
     setEditEmp(e)
     setForm({ name:e.full_name, email:e.email, pwd:'', poste:e.poste||'', contract:e.contract||'fixe',
-      hDue:e.h_due||169, vacDroit:e.vac_droit||20, vacPris:e.vac_pris||0, cycle:e.cycle||'1-1' })
+      hDue:e.h_due||169, vacDroit:e.vac_droit||20, vacPris:e.vac_pris||0, cycle:e.cycle||'1-1',
+      hireDate:e.hire_date||'', endDate:e.end_date||'' })
     setErr('')
   }
 
@@ -199,6 +201,21 @@ export default function AdminTeam() {
             <option value="fixe">Employé fixe</option>
             <option value="heure">À l'heure</option>
           </select>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+          <div className="iw">
+            <div className="il">Début du contrat</div>
+            <input className="if" type="date" value={form.hireDate} onChange={set('hireDate')}/>
+          </div>
+          {isEdit && (
+            <div className="iw">
+              <div className="il">Fin du contrat</div>
+              <input className="if" type="date" value={form.endDate} onChange={set('endDate')}/>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:'11px',color:'var(--text3)',marginTop:'-4px',marginBottom:'6px',lineHeight:'1.45'}}>
+          Obligatoire sur les relevés d'heures (art. 73 OLT 1).{isEdit ? ' Laissez la fin vide tant que la personne est en poste.' : ''}
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
           <div className="iw">

@@ -28,9 +28,10 @@ function fmtTime(ts){ if(!ts)return'—'; return format(parseISO(ts),'HH:mm') }
 export default function AdminExport() {
   const { profile, company } = useAuth()
   const [selMonth, setSelMonth] = useState(new Date().getMonth())
+  const [reportScope, setReportScope] = useState('month')  // 'month' | 'year'
+  const [reportSegs, setReportSegs] = useState([])
   const [emps, setEmps]         = useState([])
   const [allLogs, setAllLogs]   = useState([])
-  const [allSegs, setAllSegs]   = useState([])
   const [generating, setGenerating] = useState(false)
   const [toast, setToast]       = useState('')
 
@@ -51,44 +52,51 @@ export default function AdminExport() {
     setEmps(e||[])
     setAllLogs(l||[])
 
-    // Détail par secteur (si la fonctionnalité est activée)
-    if (company.sectors_enabled) {
-      const { data: segs } = await supabase.from('shift_segments')
-        .select('*')
-        .eq('company_id', company.id)
-        .gte('started_at', start.toISOString())
-        .lt('started_at', new Date(end.getTime()+86400000).toISOString())
-      setAllSegs(segs||[])
-    } else {
-      setAllSegs([])
-    }
   }
 
   // Heures par secteur pour un employé donné, triées par durée décroissante
-  function sectorsFor(userId) {
-    const map = {}
-    allSegs.filter(s => s.user_id === userId && s.ended_at).forEach(s => {
-      const h = (new Date(s.ended_at) - new Date(s.started_at)) / 3600000
-      map[s.sector] = (map[s.sector] || 0) + h
-    })
-    return Object.entries(map)
-      .map(([sector, hours]) => ({ sector, hours }))
-      .sort((a,b) => b.hours - a.hours)
-  }
+
 
   // Totaux par secteur, tous employés confondus — pour facturer un client
-  function sectorTotals() {
-    const map = {}
-    allSegs.filter(s => s.ended_at).forEach(s => {
-      const h = (new Date(s.ended_at) - new Date(s.started_at)) / 3600000
-      map[s.sector] = (map[s.sector] || 0) + h
-    })
-    return Object.entries(map)
-      .map(([sector, hours]) => ({ sector, hours }))
-      .sort((a,b) => b.hours - a.hours)
-  }
+
 
   useEffect(() => { loadData() }, [company, selMonth])
+
+  // Segments pour le rapport d'activité (portée indépendante de la feuille d'heures)
+  useEffect(() => {
+    if (!company?.sectors_enabled) { setReportSegs([]); return }
+    const from = reportScope === 'year'
+      ? new Date(year, 0, 1)
+      : new Date(year, selMonth, 1)
+    const to = reportScope === 'year'
+      ? new Date(year, 11, 31, 23, 59, 59)
+      : new Date(year, selMonth + 1, 0, 23, 59, 59)
+    supabase.from('shift_segments').select('*')
+      .eq('company_id', company.id)
+      .gte('started_at', from.toISOString())
+      .lte('started_at', to.toISOString())
+      .then(({ data }) => setReportSegs(data || []))
+  }, [company, selMonth, year, reportScope])
+
+  // Agrégations du rapport d'activité
+  function reportSectorsFor(userId) {
+    const map = {}
+    reportSegs.filter(x => x.user_id === userId && x.ended_at).forEach(x => {
+      const h = (new Date(x.ended_at) - new Date(x.started_at)) / 3600000
+      map[x.sector] = (map[x.sector] || 0) + h
+    })
+    return Object.entries(map).map(([sector, hours]) => ({ sector, hours }))
+      .sort((a, b) => b.hours - a.hours)
+  }
+  function reportTotals() {
+    const map = {}
+    reportSegs.filter(x => x.ended_at).forEach(x => {
+      const h = (new Date(x.ended_at) - new Date(x.started_at)) / 3600000
+      map[x.sector] = (map[x.sector] || 0) + h
+    })
+    return Object.entries(map).map(([sector, hours]) => ({ sector, hours }))
+      .sort((a, b) => b.hours - a.hours)
+  }
 
   // ── Générer PDF ──
   async function generatePDF() {
@@ -125,17 +133,17 @@ export default function AdminExport() {
         // Header
         doc.setFillColor(...DARK); doc.rect(lm,8,uw,10,'F')
         doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12)
-        doc.text(`POINTLY — RELEVÉ MENSUEL · ${co.toUpperCase()} · ${monthLabel.toUpperCase()}`, W/2, 14.5, {align:'center'})
+        doc.text(`FEUILLE D'HEURES · ${co.toUpperCase()} · ${monthLabel.toUpperCase()}`, W/2, 14.5, {align:'center'})
 
         doc.setFillColor(244,244,250); doc.rect(lm,18,uw,7,'F')
         doc.setTextColor(136,136,136); doc.setFont('helvetica','normal'); doc.setFontSize(8)
-        doc.text(`Période : ${format(period.start,'dd/MM/yyyy')} → ${format(period.end,'dd/MM/yyyy')}  ·  Généré le ${genDate}  ·  Document officiel non modifiable`, W/2, 22.5, {align:'center'})
+        doc.text(`Période du ${format(period.start,'dd/MM/yyyy')} au ${format(period.end,'dd/MM/yyyy')}  ·  Généré le ${genDate}`, W/2, 22.5, {align:'center'})
 
         // Infos employé
         doc.setFillColor(...BLUE_BG); doc.rect(lm,25,uw,14,'F')
         doc.setDrawColor(...BLUE); doc.rect(lm,25,uw,14,'S')
         const cw4=uw/4
-        const inf1=[['Employé',emp.full_name],['Poste',emp.poste||'—'],['Contrat',emp.contract==='heure'?'À l\'heure':'Fixe mensuel'],['Initiales',mkIni(emp.full_name)]]
+        const inf1=[['Employé',emp.full_name],['Fonction',emp.poste||'—'],['Contrat',emp.contract==='heure'?'À l\'heure':'Fixe mensuel'],['Rapports de service',(emp.hire_date?format(new Date(emp.hire_date),'dd/MM/yyyy'):'—')+(emp.end_date?' au '+format(new Date(emp.end_date),'dd/MM/yyyy'):'')]]
         inf1.forEach(([lbl,val],i) => {
           const x=lm+i*cw4+3
           doc.setTextColor(...BLUE); doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.text(lbl,x,29)
@@ -152,24 +160,75 @@ export default function AdminExport() {
         const cw=[18,16,18,16,16,14,14,16,0]
         const totCW=cw.reduce((a,b)=>a+b,0); cw[8]=uw-totCW
 
+        // Une ligne par jour du cycle — y compris les jours de repos
+        // (art. 73 al. 1 let. d OLT 1), avec un sous-total par semaine (let. c).
         const rows=[]; let totalNet=0; let workedDays=0
-        days.forEach(day => {
+        let weekNet=0; let weekLabel=null
+
+        function pushWeekSubtotal() {
+          if (weekLabel === null) return
+          rows.push({
+            v:['Semaine '+weekLabel,'','','','','',fmtH(weekNet),'','Total hebdomadaire'],
+            sub:true
+          })
+        }
+
+        days.forEach((day, di) => {
           const key = format(day,'yyyy-MM-dd')
           const log = logMap[key]
-          if (!log?.punched_in) return
+          const wk  = format(day,'II')
+
+          if (weekLabel === null) weekLabel = wk
+          else if (wk !== weekLabel) { pushWeekSubtotal(); weekNet=0; weekLabel=wk }
+
+          const dayLabel = format(day,'dd/MM')+' '+format(day,'EEEEE',{locale:fr}).toUpperCase()
+          const isSunday = day.getDay() === 0
+
+          if (!log?.punched_in) {
+            rows.push({
+              v:[dayLabel,'—','—','—','—','—','—','','Repos'],
+              rest:true, sunday:isSunday
+            })
+            return
+          }
+
           workedDays++
-          const nh = log.net_hours||0; totalNet+=nh
+          const nh = log.net_hours||0; totalNet+=nh; weekNet+=nh
+
+          // Seules les pauses d'au moins 30 min doivent figurer (art. 73 al. 1 let. e)
+          const pauseMin = (log.pause_start && log.pause_end)
+            ? Math.round((new Date(log.pause_end)-new Date(log.pause_start))/60000)
+            : 0
+
+          // Travail de nuit : 23h00–06h00 (art. 10 LTr) — déclenche des majorations
+          const hIn  = new Date(log.punched_in).getHours()
+          const hOut = log.punched_out ? new Date(log.punched_out).getHours() : hIn
+          const isNight = hIn >= 23 || hIn < 6 || hOut >= 23 || hOut < 6
+
+          const flags = []
+          if (isSunday) flags.push('Dimanche')
+          if (isNight)  flags.push('Nuit')
+          const note = [flags.join(' + '), log.remark||''].filter(Boolean).join(' · ')
+
           rows.push({
-            v:[format(day,'dd/MM'),fmtTime(log.punched_in),log.pause_start?fmtTime(log.pause_start):'—',log.pause_end?fmtTime(log.pause_end):'—',log.punched_out?fmtTime(log.punched_out):'—',
-              log.pause_start&&log.pause_end?`${Math.round((new Date(log.pause_end)-new Date(log.pause_start))/60000)} min`:'—',
-              fmtH(nh), log.is_modified?'✓ OUI':'Non', log.remark||''],
-            mod: log.is_modified
+            v:[dayLabel,fmtTime(log.punched_in),
+               pauseMin>0?fmtTime(log.pause_start):'—',
+               pauseMin>0?fmtTime(log.pause_end):'—',
+               log.punched_out?fmtTime(log.punched_out):'—',
+               pauseMin>0?`${pauseMin} min`:'—',
+               fmtH(nh), log.is_modified?'OUI':'Non', note],
+            mod: log.is_modified, special: flags.length>0, sunday:isSunday
           })
         })
+        pushWeekSubtotal()
+
+        if (rows.length === 0) {
+          rows.push({ v:['—','—','—','—','—','—','0h00','Non','Aucun pointage enregistré sur la période'], mod:false })
+        }
 
         doc.autoTable({
           startY:43,
-          head:[['DATE','ARRIVÉE','DÉB.PAUSE','FIN PAUSE','DÉPART','PAUSE','HEURES NET','MODIFIÉ','REMARQUE']],
+          head:[['DATE','ARRIVÉE','DÉB.PAUSE','FIN PAUSE','DÉPART','PAUSE','HEURES NET','MODIFIÉ','OBSERVATIONS']],
           body:rows.map(r=>r.v),
           columnStyles:Object.fromEntries(cw.map((w,i)=>([i,{cellWidth:w,halign:i===8?'left':'center'}]))),
           headStyles:{fillColor:MID,textColor:[255,255,255],fontStyle:'bold',fontSize:7.5,halign:'center',cellPadding:2.5},
@@ -178,25 +237,45 @@ export default function AdminExport() {
           margin:{left:lm,right:lm},
           tableLineColor:GREY,tableLineWidth:0.3,
           didParseCell(data){
-            if(data.section==='body'){
-              const r=rows[data.row.index]
-              if(r?.mod){ data.cell.styles.fillColor=MODIF_BG; if(data.column.index===7)data.cell.styles.textColor=MODIF_FG }
-              if(data.column.index===6){ data.cell.styles.textColor=GREEN; data.cell.styles.fontStyle='bold' }
+            if(data.section!=='body') return
+            const r=rows[data.row.index]
+            if(data.column.index===6){ data.cell.styles.textColor=GREEN; data.cell.styles.fontStyle='bold' }
+            if(r?.rest){
+              data.cell.styles.fillColor=[250,250,252]
+              data.cell.styles.textColor=[170,170,180]
+              if(data.column.index===6) data.cell.styles.textColor=[170,170,180]
+            }
+            if(r?.sunday){ data.cell.styles.fontStyle='bold' }
+            if(r?.special){ data.cell.styles.fillColor=BLUE_BG }
+            if(r?.mod){ data.cell.styles.fillColor=MODIF_BG; if(data.column.index===7)data.cell.styles.textColor=MODIF_FG }
+            if(r?.sub){
+              data.cell.styles.fillColor=[236,236,244]
+              data.cell.styles.fontStyle='bold'
+              data.cell.styles.textColor=DARK
+              if(data.column.index===6) data.cell.styles.textColor=DARK
             }
           }
         })
 
         const aty = doc.lastAutoTable.finalY+4
+        const isHourly = emp.contract==='heure'
         const hDue=emp.h_due||169; const hSupp=totalNet-hDue
         const sBg=hSupp>=0?GREEN_BG:RED_BG; const sFg=hSupp>=0?GREEN:RED
         const cw6=uw/6
-        const ri=[
+        const ri = isHourly ? [
+          {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
+          {l:'JOURS TRAVAILLÉS',v:workedDays+' j',bg:[245,245,250],fg:DARK},
+          {l:'MOYENNE / JOUR',v:workedDays?fmtH(totalNet/workedDays):'—',bg:BLUE_BG,fg:BLUE},
+          {l:'CONTRAT',v:'À l\'heure',bg:[245,245,250],fg:DARK},
+          {l:'VAC. RESTANTES',v:((emp.vac_droit||20)-(emp.vac_pris||0))+' j',bg:ORANGE_BG,fg:[239,159,39]},
+          {l:'À FACTURER',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
+        ] : [
           {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
           {l:'HEURES DUES',v:fmtH(hDue),bg:BLUE_BG,fg:BLUE},
-          {l:'H. SUPP.',v:(hSupp>=0?'+':'')+hSupp.toFixed(2)+'h',bg:sBg,fg:sFg},
+          {l:'H. SUPP.',v:(hSupp>=0?'+':'-')+fmtH(Math.abs(hSupp)),bg:sBg,fg:sFg},
           {l:'VAC. RESTANTES',v:((emp.vac_droit||20)-(emp.vac_pris||0))+' j',bg:ORANGE_BG,fg:[239,159,39]},
           {l:'JOURS TRAVAILLÉS',v:workedDays+' j',bg:[245,245,250],fg:DARK},
-          {l:'STATUT',v:hSupp>=0?'✓ Positif':'⚠ Négatif',bg:sBg,fg:sFg},
+          {l:'SOLDE',v:hSupp>=0?'Positif':'Negatif',bg:sBg,fg:sFg},
         ]
         ri.forEach((item,i) => {
           const rx=lm+i*cw6
@@ -206,33 +285,7 @@ export default function AdminExport() {
           doc.setTextColor(...item.fg); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(item.v,rx+cw6/2,aty+10,{align:'center'})
         })
 
-        // ── Détail par secteur (si activé) ──
         let secY = aty + 16
-        const empSectors = company?.sectors_enabled ? sectorsFor(emp.id) : []
-        if (empSectors.length > 0) {
-          doc.setFillColor(...DARK); doc.rect(lm, secY, uw, 6, 'F')
-          doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(7.5)
-          doc.text('DÉTAIL PAR SECTEUR', lm+3, secY+4.2)
-          doc.setFontSize(7)
-          doc.text('Total : '+fmtH(totalNet), lm+uw-3, secY+4.2, {align:'right'})
-          secY += 6
-
-          const rowH = 6
-          empSectors.forEach((sec, i) => {
-            const bg = i % 2 === 0 ? [252,252,254] : [255,255,255]
-            doc.setFillColor(...bg); doc.rect(lm, secY, uw, rowH, 'F')
-            doc.setDrawColor(...GREY); doc.rect(lm, secY, uw, rowH, 'S')
-            doc.setTextColor(...DARK); doc.setFont('helvetica','normal'); doc.setFontSize(8)
-            doc.text(sec.sector, lm+3, secY+4)
-            const pct = totalNet > 0 ? Math.round(sec.hours/totalNet*100) : 0
-            doc.setTextColor(120,120,130); doc.setFontSize(7)
-            doc.text(pct+' %', lm+uw-28, secY+4, {align:'right'})
-            doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(8)
-            doc.text(fmtH(sec.hours), lm+uw-3, secY+4, {align:'right'})
-            secY += rowH
-          })
-          secY += 4
-        }
 
         // Signatures
         const sy=secY
@@ -246,8 +299,10 @@ export default function AdminExport() {
         })
 
         // Pied
+        doc.setTextColor(150,150,150); doc.setFont('helvetica','normal'); doc.setFontSize(6)
+        doc.text("Relevé établi conformément aux art. 46 LTr et 73 OLT 1. À conserver 5 ans. Les pauses de moins de 30 minutes ne sont pas mentionnées.", W/2, 202.5, {align:'center'})
         doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(6.5)
-        doc.text(`Pointly · ${co} · ${monthLabel} · Non modifiable · ${empIdx+1}/${emps.length}`, W/2, 206, {align:'center'})
+        doc.text(`Pointly · ${co} · ${monthLabel} · ${empIdx+1}/${emps.length}`, W/2, 206, {align:'center'})
 
         // Filigrane
         doc.saveGraphicsState(); doc.setGState(new doc.GState({opacity:0.03}))
@@ -285,60 +340,10 @@ export default function AdminExport() {
       })
 
       doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(6.5)
-      doc.text(`Pointly · ${co} · ${monthLabel} · Document officiel non modifiable`, W/2, 206, {align:'center'})
+      doc.text(`Pointly · ${co} · ${monthLabel} · Relevé généré automatiquement`, W/2, 206, {align:'center'})
 
-      // ── Page facturation par secteur ──
-      const totals = company?.sectors_enabled ? sectorTotals() : []
-      if (totals.length > 0) {
-        doc.addPage('a4','landscape')
-        doc.setFillColor(...DARK); doc.rect(lm,8,uw,10,'F')
-        doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12)
-        doc.text(`HEURES PAR SECTEUR · ${co.toUpperCase()} · ${monthLabel.toUpperCase()}`, W/2, 14.5, {align:'center'})
-
-        // Tableau croisé : une ligne par secteur, une colonne par employé
-        const sectorRows = totals.map(t => {
-          const perEmp = emps.map(e => {
-            const found = sectorsFor(e.id).find(x => x.sector === t.sector)
-            return found ? fmtH(found.hours) : '—'
-          })
-          return [t.sector, ...perEmp, fmtH(t.hours)]
-        })
-
-        const grandTotal = totals.reduce((a,t) => a+t.hours, 0)
-        sectorRows.push([
-          'TOTAL',
-          ...emps.map(e => fmtH(sectorsFor(e.id).reduce((a,x) => a+x.hours, 0))),
-          fmtH(grandTotal),
-        ])
-
-        doc.autoTable({
-          startY: 22,
-          head: [['SECTEUR', ...emps.map(e => e.full_name.toUpperCase()), 'TOTAL']],
-          body: sectorRows,
-          headStyles: { fillColor: MID, textColor:[255,255,255], fontStyle:'bold', fontSize:8, halign:'center' },
-          bodyStyles: { fontSize:8.5, cellPadding:3.5 },
-          alternateRowStyles: { fillColor:[248,248,252] },
-          columnStyles: { 0: { fontStyle:'bold', halign:'left' } },
-          didParseCell: d => {
-            if (d.row.index === sectorRows.length-1) {
-              d.cell.styles.fontStyle = 'bold'
-              d.cell.styles.fillColor = GREEN_BG
-            }
-            if (d.column.index === 0) d.cell.styles.halign = 'left'
-            else d.cell.styles.halign = 'right'
-          },
-          margin: { left: lm, right: lm },
-        })
-
-        doc.setTextColor(120,120,130); doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
-        doc.text("Temps de pause non attribué à un secteur. Segments en cours (non clôturés) exclus.", lm, doc.lastAutoTable.finalY+6)
-
-        doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(6.5)
-        doc.text(`Pointly · ${co} · ${monthLabel} · Pour facturation`, W/2, 206, {align:'center'})
-      }
-
-      doc.save(`Pointly_${co.replace(/ /g,'_')}_${monthLabel.replace(/ /g,'_')}.pdf`)
-      showToast('✅ PDF téléchargé !')
+      doc.save(`Feuille-heures_${co.replace(/ /g,'_')}_${monthLabel.replace(/ /g,'_')}.pdf`)
+      showToast('Feuille d\'heures téléchargée')
     } catch(err) {
       showToast('Erreur PDF : '+err.message)
       console.error(err)
@@ -418,38 +423,73 @@ export default function AdminExport() {
           </div>
         )}
 
-        {/* Aperçu des heures par secteur */}
-        {company?.sectors_enabled && sectorTotals().length > 0 && (
-          <div className="card">
-            <div className="card-title">Heures par secteur — {MONTHS[selMonth]}</div>
-            {sectorTotals().map(t => (
-              <div key={t.sector} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-                <span style={{fontSize:'14px',fontWeight:'700'}}>{t.sector}</span>
-                <span style={{fontSize:'14px',fontWeight:'800',fontFamily:'var(--mono)'}}>{fmtH(t.hours)}</span>
+        {/* ── Feuille d'heures ── */}
+        <div className="card" style={{borderLeft:'3px solid var(--accent)'}}>
+          <div className="card-title">Feuille d'heures</div>
+          <div style={{fontSize:'12px',color:'var(--text2)',lineHeight:'1.55',marginBottom:'12px'}}>
+            Une page par employé : horaires, pauses, jours de repos et totaux hebdomadaires.
+            Établie selon les art. 46 LTr et 73 OLT 1 — c'est le document à remettre à votre
+            fiduciaire ou à présenter en cas de contrôle.
+          </div>
+          <button className="btn btn-p" onClick={generatePDF} disabled={generating||emps.length===0}>
+            {generating
+              ? <><div className="spinner" style={{width:'18px',height:'18px',borderWidth:'2px',borderColor:'rgba(255,255,255,.3)',borderTopColor:'#fff'}}/> Génération…</>
+              : <><i className="ti ti-file-description"/>Feuille d'heures — {MONTHS[selMonth]}</>
+            }
+          </button>
+          <button className="btn btn-s" style={{marginTop:'8px'}} onClick={exportCSV} disabled={emps.length===0}>
+            <i className="ti ti-file-spreadsheet"/>Version tableur (CSV)
+          </button>
+        </div>
+
+        {/* ── Rapport d'activité ── */}
+        {company?.sectors_enabled && (
+          <div className="card" style={{borderLeft:'3px solid var(--green)'}}>
+            <div className="card-title">Rapport d'activité par secteur</div>
+            <div style={{fontSize:'12px',color:'var(--text2)',lineHeight:'1.55',marginBottom:'12px'}}>
+              Répartition des heures par secteur et par personne. Document interne, utile pour
+              facturer un client ou un chantier — il ne remplace pas la feuille d'heures.
+            </div>
+
+            <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+              <span className={`chip ${reportScope==='month'?'c-on':'c-off'}`}
+                onClick={()=>setReportScope('month')}>{MONTHS[selMonth]}</span>
+              <span className={`chip ${reportScope==='year'?'c-on':'c-off'}`}
+                onClick={()=>setReportScope('year')}>Année {year}</span>
+            </div>
+
+            {reportTotals().length === 0 ? (
+              <div style={{fontSize:'13px',color:'var(--text3)',padding:'6px 0 12px'}}>
+                Aucune heure attribuée à un secteur sur cette période.
               </div>
-            ))}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',paddingTop:'10px'}}>
-              <span style={{fontSize:'13px',color:'var(--text2)'}}>Total attribué</span>
-              <span style={{fontSize:'17px',fontWeight:'800',fontFamily:'var(--mono)'}}>
-                {fmtH(sectorTotals().reduce((a,t)=>a+t.hours,0))}
-              </span>
-            </div>
-            <div style={{fontSize:'11px',color:'var(--text3)',marginTop:'8px',lineHeight:'1.5'}}>
-              Le détail par secteur et par employé figure dans le PDF et le CSV.
-            </div>
+            ) : (
+              <div style={{marginBottom:'12px'}}>
+                {reportTotals().map(t => {
+                  const g = reportTotals().reduce((a,x)=>a+x.hours,0)
+                  const pct = g>0 ? Math.round(t.hours/g*100) : 0
+                  return (
+                    <div key={t.sector} style={{display:'flex',alignItems:'baseline',gap:'10px',padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
+                      <span style={{fontSize:'14px',fontWeight:'700',flex:1}}>{t.sector}</span>
+                      <span style={{fontSize:'11px',color:'var(--text3)'}}>{pct} %</span>
+                      <span style={{fontSize:'14px',fontWeight:'800',fontFamily:'var(--mono)',minWidth:'56px',textAlign:'right'}}>{fmtH(t.hours)}</span>
+                    </div>
+                  )
+                })}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',paddingTop:'10px'}}>
+                  <span style={{fontSize:'13px',color:'var(--text2)'}}>Total attribué</span>
+                  <span style={{fontSize:'17px',fontWeight:'800',fontFamily:'var(--mono)'}}>
+                    {fmtH(reportTotals().reduce((a,t)=>a+t.hours,0))}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <button className="btn btn-g" onClick={generateReport} disabled={generating||reportTotals().length===0}>
+              <i className="ti ti-chart-pie"/>Rapport — {reportScope==='year' ? year : MONTHS[selMonth]}
+            </button>
           </div>
         )}
 
-        {/* Boutons export */}
-        <button className="btn btn-r" onClick={generatePDF} disabled={generating||emps.length===0}>
-          {generating
-            ? <><div className="spinner" style={{width:'18px',height:'18px',borderWidth:'2px',borderColor:'rgba(255,255,255,.3)',borderTopColor:'#fff'}}/> Génération…</>
-            : <><i className="ti ti-file-type-pdf"/>Exporter PDF officiel</>
-          }
-        </button>
-        <button className="btn btn-s" onClick={exportCSV} disabled={emps.length===0}>
-          <i className="ti ti-file-spreadsheet"/>Exporter CSV
-        </button>
       </div>
 
       <div className="nav">
@@ -463,6 +503,82 @@ export default function AdminExport() {
       {toast && <div className="toast">{toast}</div>}
     </div>
   )
+
+  async function generateReport() {
+    if (!window.jspdf) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+    }
+    setGenerating(true)
+    try {
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' })
+      const W=297, lm=12, uw=W-lm*2
+      const co = company?.name||'Mon entreprise'
+      const DARK=[26,26,46], MID=[46,46,94], GREEN=[29,158,117], GREEN_BG=[225,245,238]
+      const label = reportScope==='year' ? String(year) : MONTHS[selMonth]+' '+year
+      const genDate = format(new Date(),'dd/MM/yyyy HH:mm')
+
+      const totals = reportTotals()
+      const grand  = totals.reduce((a,t)=>a+t.hours,0)
+
+      doc.setFillColor(...DARK); doc.rect(lm,8,uw,10,'F')
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12)
+      doc.text(`RAPPORT D'ACTIVITÉ PAR SECTEUR · ${co.toUpperCase()} · ${label.toUpperCase()}`, W/2, 14.5, {align:'center'})
+
+      doc.setFillColor(244,244,250); doc.rect(lm,18,uw,7,'F')
+      doc.setTextColor(136,136,136); doc.setFont('helvetica','normal'); doc.setFontSize(8)
+      doc.text(`Généré le ${genDate}  ·  Document interne — non destiné au contrôle des heures`, W/2, 22.5, {align:'center'})
+
+      if (totals.length === 0) {
+        doc.setTextColor(...DARK); doc.setFont('helvetica','normal'); doc.setFontSize(11)
+        doc.text("Aucune heure attribuée à un secteur sur cette période.", W/2, 60, {align:'center'})
+      } else {
+        const withHours = emps.filter(e => reportSectorsFor(e.id).length > 0)
+        const rows = totals.map(t => {
+          const per = withHours.map(e => {
+            const f = reportSectorsFor(e.id).find(x => x.sector === t.sector)
+            return f ? fmtH(f.hours) : '—'
+          })
+          const pct = grand>0 ? Math.round(t.hours/grand*100)+' %' : '—'
+          return [t.sector, ...per, pct, fmtH(t.hours)]
+        })
+        rows.push(['TOTAL',
+          ...withHours.map(e => fmtH(reportSectorsFor(e.id).reduce((a,x)=>a+x.hours,0))),
+          '100 %', fmtH(grand)])
+
+        doc.autoTable({
+          startY: 30,
+          head: [['SECTEUR', ...withHours.map(e => e.full_name.toUpperCase()), 'PART', 'TOTAL']],
+          body: rows,
+          headStyles:{ fillColor:MID, textColor:[255,255,255], fontStyle:'bold', fontSize:8, halign:'center' },
+          bodyStyles:{ fontSize:9, cellPadding:3.5 },
+          alternateRowStyles:{ fillColor:[248,248,252] },
+          margin:{ left:lm, right:lm },
+          didParseCell: d => {
+            d.cell.styles.halign = d.column.index===0 ? 'left' : 'right'
+            if (d.section==='body' && d.row.index === rows.length-1) {
+              d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=GREEN_BG
+              if (d.column.index === rows[0].length-1) d.cell.styles.textColor=GREEN
+            }
+            if (d.section==='body' && d.column.index === rows[0].length-1) d.cell.styles.fontStyle='bold'
+          },
+        })
+
+        doc.setTextColor(120,120,130); doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
+        doc.text("Le temps de pause n'est attribué à aucun secteur. Les périodes en cours (non clôturées) sont exclues.", lm, doc.lastAutoTable.finalY+6)
+      }
+
+      doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(6.5)
+      doc.text(`Pointly · ${co} · ${label}`, W/2, 206, {align:'center'})
+
+      doc.save(`Rapport-secteurs_${co.replace(/ /g,'_')}_${label.replace(/ /g,'_')}.pdf`)
+      showToast("Rapport d'activité téléchargé")
+    } catch(err) {
+      showToast('Erreur : '+err.message)
+    }
+    setGenerating(false)
+  }
 
   function exportCSV() {
     const co = company?.name||'Pointly'
@@ -482,35 +598,11 @@ export default function AdminExport() {
           fmtH(log.net_hours||0),log.is_modified?'OUI':'Non',log.remark||''].join(';'))
       })
     })
-    // ── Détail par secteur ──
-    if (company?.sectors_enabled && allSegs.length > 0) {
-      lines.push('')
-      lines.push('DÉTAIL PAR SECTEUR')
-      lines.push('Employé;Secteur;Heures')
-      emps.forEach(emp => {
-        const secs = sectorsFor(emp.id)
-        secs.forEach(x => {
-          lines.push([emp.full_name, x.sector, fmtH(x.hours)].join(';'))
-        })
-        if (secs.length > 0) {
-          const t = secs.reduce((a,x)=>a+x.hours,0)
-          lines.push([emp.full_name, 'TOTAL', fmtH(t)].join(';'))
-        }
-      })
-
-      lines.push('')
-      lines.push('TOTAUX PAR SECTEUR (pour facturation)')
-      lines.push('Secteur;Heures')
-      const tot = sectorTotals()
-      tot.forEach(t => lines.push([t.sector, fmtH(t.hours)].join(';')))
-      lines.push(['TOTAL GÉNÉRAL', fmtH(tot.reduce((a,t)=>a+t.hours,0))].join(';'))
-    }
-
     const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a'); a.href=url
-    a.download=`Pointly_${co.replace(/ /g,'_')}_${monthLabel.replace(/ /g,'_')}.csv`
+    a.download=`Feuille-heures_${co.replace(/ /g,'_')}_${monthLabel.replace(/ /g,'_')}.csv`
     a.click(); URL.revokeObjectURL(url)
-    showToast('CSV téléchargé ✅')
+    showToast('CSV téléchargé')
   }
 }
