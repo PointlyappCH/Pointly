@@ -8,7 +8,7 @@ export default function AdminSettings() {
   const [toast, setToast]   = useState('')
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E', sectors_enabled: false, sector_input_mode: 'free'
+    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E', sectors_enabled: false, sector_input_mode: 'free', require_daily_code: true
   })
   const [postes, setPostes] = useState([])
   const [zones, setZones] = useState([])
@@ -27,6 +27,7 @@ export default function AdminSettings() {
         brand_color: company.brand_color|| '#1A1A2E',
         sectors_enabled: company.sectors_enabled || false,
         sector_input_mode: company.sector_input_mode || 'free',
+        require_daily_code: company.require_daily_code !== false,
       })
     }
     loadPostes()
@@ -77,7 +78,7 @@ export default function AdminSettings() {
     if (!company) return
     setLoading(true)
     const { error } = await supabase.from('companies')
-      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color, sectors_enabled: form.sectors_enabled, sector_input_mode: form.sector_input_mode })
+      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color, sectors_enabled: form.sectors_enabled, sector_input_mode: form.sector_input_mode, require_daily_code: form.require_daily_code })
       .eq('id', company.id)
     setLoading(false)
     if (error) { showToast('Erreur : '+error.message); return }
@@ -162,6 +163,31 @@ export default function AdminSettings() {
               <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}}>{o.sub}</div>
             </div>
           ))}
+        </div>
+
+        {/* Code de pointage */}
+        <div className="card">
+          <div className="card-title">Code de pointage</div>
+          <div onClick={()=>setForm(f=>({...f,require_daily_code:!f.require_daily_code}))}
+            style={{display:'flex',alignItems:'center',gap:'12px',cursor:'pointer',padding:'4px 0'}}>
+            <div style={{
+              width:'46px',height:'26px',borderRadius:'20px',flexShrink:0,position:'relative',
+              background:form.require_daily_code?'var(--accent)':'var(--border)',transition:'background .15s'
+            }}>
+              <div style={{
+                width:'20px',height:'20px',borderRadius:'50%',background:'#fff',position:'absolute',top:'3px',
+                left:form.require_daily_code?'23px':'3px',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.3)'
+              }}/>
+            </div>
+            <div>
+              <div style={{fontSize:'14px',fontWeight:'700'}}>Exiger un code pour pointer</div>
+              <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}}>
+                {form.require_daily_code
+                  ? "Un code à 4 chiffres change chaque jour. À afficher sur le lieu de travail — empêche de pointer à distance."
+                  : "Vos employés pointent en un clic, où qu'ils soient."}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Suivi par secteur */}

@@ -411,8 +411,8 @@ export default function DayView() {
               </div>
               <div className="iw"><div className="il">Poste</div>
                 <select className="if" value={shiftForm.poste} onChange={e=>setShiftForm(f=>({...f,poste:e.target.value}))} style={{cursor:'pointer'}}>
+                  <option value="">Sans poste</option>
                   {postes.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                  {postes.length===0 && <option>— Créez des postes dans Équipe</option>}
                 </select>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>

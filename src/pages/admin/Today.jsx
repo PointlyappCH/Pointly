@@ -135,18 +135,20 @@ export default function AdminToday() {
         </div>
 
         {/* Code du jour */}
+        {company?.require_daily_code !== false && (
         <div className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',padding:'14px 16px'}}>
           <div>
             <div style={{fontSize:'11px',color:'var(--text2)',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.03em'}}>Code du jour</div>
             <div style={{fontSize:'28px',fontWeight:'800',letterSpacing:'.08em',fontVariantNumeric:'tabular-nums'}}>
               {dailyCode || '····'}
             </div>
-            <div style={{fontSize:'11px',color:'var(--text3)'}}>À afficher dans la cabane pour le pointage</div>
+            <div style={{fontSize:'11px',color:'var(--text3)'}}>À afficher sur le lieu de travail</div>
           </div>
           <button className="btn btn-sm btn-o" onClick={regenerateCode} disabled={regenerating}>
             <i className="ti ti-refresh"/>{regenerating ? '...' : 'Régénérer'}
           </button>
         </div>
+        )}
 
         {/* Stats rapides */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px'}}>
