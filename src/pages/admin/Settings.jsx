@@ -8,9 +8,11 @@ export default function AdminSettings() {
   const [toast, setToast]   = useState('')
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E', sectors_enabled: false
+    name: '', sector: 'Restauration', pause_mode: 'managed', brand_color: '#1A1A2E', sectors_enabled: false, sector_input_mode: 'free'
   })
   const [postes, setPostes] = useState([])
+  const [zones, setZones] = useState([])
+  const [newZone, setNewZone] = useState('')
   const [newPoste, setNewPoste] = useState('')
 
   function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
@@ -24,9 +26,11 @@ export default function AdminSettings() {
         pause_mode:  company.pause_mode || 'managed',
         brand_color: company.brand_color|| '#1A1A2E',
         sectors_enabled: company.sectors_enabled || false,
+        sector_input_mode: company.sector_input_mode || 'free',
       })
     }
     loadPostes()
+    loadZones()
   }, [company])
 
   async function loadPostes() {
@@ -36,11 +40,44 @@ export default function AdminSettings() {
     setPostes(data || [])
   }
 
+  async function loadZones() {
+    if (!company) return
+    const { data } = await supabase.from('sectors')
+      .select('*').eq('company_id', company.id).order('name')
+    setZones(data || [])
+  }
+
+  async function addZone() {
+    if (!newZone.trim() || !company) return
+    const { error } = await supabase.from('sectors')
+      .insert({ company_id: company.id, name: newZone.trim(), created_by: profile?.id })
+    if (error) {
+      showToast(error.code === '23505' ? 'Ce secteur existe déjà' : 'Erreur : '+error.message)
+      return
+    }
+    setNewZone(''); loadZones(); showToast('Secteur ajouté ✅')
+  }
+
+  async function validateZone(id) {
+    await supabase.from('sectors').update({ is_pending: false }).eq('id', id)
+    loadZones(); showToast('Secteur validé ✅')
+  }
+
+  async function toggleZoneActive(z) {
+    await supabase.from('sectors').update({ is_active: !z.is_active }).eq('id', z.id)
+    loadZones()
+  }
+
+  async function deleteZone(id) {
+    await supabase.from('sectors').delete().eq('id', id)
+    loadZones()
+  }
+
   async function saveCompany() {
     if (!company) return
     setLoading(true)
     const { error } = await supabase.from('companies')
-      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color, sectors_enabled: form.sectors_enabled })
+      .update({ name: form.name, sector: form.sector, pause_mode: form.pause_mode, brand_color: form.brand_color, sectors_enabled: form.sectors_enabled, sector_input_mode: form.sector_input_mode })
       .eq('id', company.id)
     setLoading(false)
     if (error) { showToast('Erreur : '+error.message); return }
@@ -149,6 +186,74 @@ export default function AdminSettings() {
             </div>
           </div>
         </div>
+
+        {/* Liste des secteurs — visible uniquement si l'option est activée */}
+        {form.sectors_enabled && (
+          <>
+            <div className="card">
+              <div className="card-title">Saisie du secteur par l'employé</div>
+              {[
+                {k:'free',      title:'Liste + saisie libre',        sub:'Un nouveau secteur rejoint la liste automatiquement'},
+                {k:'validated', title:'Liste + saisie à valider',    sub:'Vous validez les nouveaux secteurs avant qu\'ils rejoignent la liste'},
+                {k:'locked',    title:'Liste uniquement',            sub:'Impossible de créer un secteur depuis le terrain'},
+              ].map(o=>(
+                <div key={o.k} onClick={()=>setForm(f=>({...f,sector_input_mode:o.k}))}
+                  style={{border:`2px solid ${form.sector_input_mode===o.k?'var(--accent)':'var(--border)'}`,borderRadius:'var(--rs)',padding:'12px',cursor:'pointer',marginBottom:'8px',transition:'border-color .15s'}}>
+                  <div style={{fontSize:'14px',fontWeight:'700'}}>{o.title}</div>
+                  <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}}>{o.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="card">
+              <div className="card-title">Mes secteurs ({zones.length})</div>
+              <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+                <input className="if" style={{flex:1}} value={newZone}
+                  onChange={e=>setNewZone(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter') addZone() }}
+                  placeholder="Ex: Piste des Mélèzes"/>
+                <button className="btn btn-p btn-sm" onClick={addZone}><i className="ti ti-plus"/></button>
+              </div>
+
+              {zones.length===0 && (
+                <div style={{fontSize:'13px',color:'var(--text3)'}}>
+                  Aucun secteur — ajoutez ceux que votre équipe utilise le plus
+                </div>
+              )}
+
+              {zones.map(z=>(
+                <div key={z.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:'14px',fontWeight:'700',color: z.is_active ? 'var(--text)' : 'var(--text3)', textDecoration: z.is_active ? 'none' : 'line-through'}}>
+                      {z.name}
+                    </div>
+                    {z.is_pending && (
+                      <span className="badge" style={{background:'var(--orange-bg)',color:'#7A4500',fontSize:'10px',marginTop:'3px',display:'inline-block'}}>
+                        Créé sur le terrain — à valider
+                      </span>
+                    )}
+                  </div>
+                  {z.is_pending && (
+                    <button className="btn btn-g btn-sm" onClick={()=>validateZone(z.id)} title="Valider">
+                      <i className="ti ti-check"/>
+                    </button>
+                  )}
+                  <button className="btn btn-s btn-sm" onClick={()=>toggleZoneActive(z)} title={z.is_active?'Désactiver':'Réactiver'}>
+                    <i className={`ti ${z.is_active?'ti-eye-off':'ti-eye'}`}/>
+                  </button>
+                  <button className="btn btn-s btn-sm" style={{color:'var(--red)'}} onClick={()=>deleteZone(z.id)} title="Supprimer">
+                    <i className="ti ti-trash"/>
+                  </button>
+                </div>
+              ))}
+
+              <div style={{fontSize:'11px',color:'var(--text3)',marginTop:'10px',lineHeight:'1.5'}}>
+                Désactiver un secteur le retire des choix proposés sans effacer l'historique.
+                Le supprimer ne modifie pas les pointages déjà enregistrés.
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Postes de travail */}
         <div className="card">
