@@ -189,8 +189,8 @@ export default function AdminTeam() {
         <div className="iw">
           <div className="il">Poste</div>
           <select className="if" value={form.poste} onChange={set('poste')} style={{cursor:'pointer'}}>
+            <option value="">Sans poste</option>
             {postes.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-            {postes.length===0 && <option>— Créez d'abord des postes</option>}
           </select>
         </div>
         <div className="iw">
