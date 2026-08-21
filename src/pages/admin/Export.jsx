@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
-  parseISO, getDate
+  parseISO, getDate, differenceInCalendarMonths
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -22,9 +22,6 @@ function getCyclePeriod(cycle, monthIdx, year) {
   return { start, end, label: `${String(day).padStart(2,'0')}/${String(monthIdx).padStart(2,'0')} → ${String(day-1).padStart(2,'0')}/${String(monthIdx+1).padStart(2,'0')} ${year}` }
 }
 
-// Retourne toujours un tableau valide, même si les dates de la période sont corrompues
-// (cycle mal renseigné, date invalide, etc.) — évite de faire planter tout le PDF
-// pour un seul employé avec des données incorrectes.
 function safeDaysInterval(start, end) {
   try {
     if (!(start instanceof Date) || isNaN(start.getTime())) return []
@@ -42,7 +39,7 @@ function fmtTime(ts){ if(!ts)return'—'; return format(parseISO(ts),'HH:mm') }
 export default function AdminExport() {
   const { profile, company } = useAuth()
   const [selMonth, setSelMonth] = useState(new Date().getMonth())
-  const [reportScope, setReportScope] = useState('month')  // 'month' | 'year'
+  const [reportScope, setReportScope] = useState('month')
   const [reportSegs, setReportSegs] = useState([])
   const [emps, setEmps]         = useState([])
   const [allLogs, setAllLogs]   = useState([])
@@ -65,12 +62,10 @@ export default function AdminExport() {
     ])
     setEmps(e||[])
     setAllLogs(l||[])
-
   }
 
   useEffect(() => { loadData() }, [company, selMonth])
 
-  // Segments pour le rapport d'activité (portée indépendante de la feuille d'heures)
   useEffect(() => {
     if (!company?.sectors_enabled) { setReportSegs([]); return }
     const from = reportScope === 'year'
@@ -86,7 +81,6 @@ export default function AdminExport() {
       .then(({ data }) => setReportSegs(data || []))
   }, [company, selMonth, year, reportScope])
 
-  // Agrégations du rapport d'activité
   function reportSectorsFor(userId) {
     const map = {}
     reportSegs.filter(x => x.user_id === userId && x.ended_at).forEach(x => {
@@ -106,7 +100,31 @@ export default function AdminExport() {
       .sort((a, b) => b.hours - a.hours)
   }
 
-  // ── Générer PDF ──
+  // Calcule le solde d'heures cumulé d'un employé depuis sa date d'embauche
+  // jusqu'à la fin de la période sélectionnée. Se reporte automatiquement
+  // d'un mois sur l'autre — rien à stocker ni mettre à jour manuellement.
+  async function computeCumulativeBalance(emp, periodEnd) {
+    try {
+      const anchor = emp.hire_date ? new Date(emp.hire_date) : periodEnd
+      if (isNaN(anchor.getTime()) || anchor > periodEnd) {
+        return { cumulativeSupp: 0, monthsElapsed: 0 }
+      }
+      const monthsElapsed = Math.max(1, differenceInCalendarMonths(periodEnd, anchor) + 1)
+      const cumulativeDue = (emp.h_due || 169) * monthsElapsed
+
+      const { data: cumLogs } = await supabase.from('time_logs')
+        .select('net_hours')
+        .eq('user_id', emp.id)
+        .gte('log_date', format(anchor, 'yyyy-MM-dd'))
+        .lte('log_date', format(periodEnd, 'yyyy-MM-dd'))
+
+      const cumulativeWorked = (cumLogs || []).reduce((a, l) => a + (l.net_hours || 0), 0)
+      return { cumulativeSupp: cumulativeWorked - cumulativeDue, monthsElapsed }
+    } catch {
+      return { cumulativeSupp: 0, monthsElapsed: 0 }
+    }
+  }
+
   async function generatePDF() {
     setGenerating(true)
     showToast('Chargement jsPDF…')
@@ -133,16 +151,14 @@ export default function AdminExport() {
 
       let pageAdded = false
 
-      emps.forEach((emp) => {
-        // ── Chaque employé est isolé : si ses données sont corrompues (cycle invalide,
-        // dates cassées, etc.), on le saute plutôt que de faire planter tout le PDF.
+      for (const emp of emps) {
         try {
           const period = getCyclePeriod(emp.cycle||'1-1', selMonth, year)
           const days   = safeDaysInterval(period.start, period.end)
 
           if (days.length === 0) {
             skipped.push(emp.full_name + ' (période invalide — vérifier son cycle de calcul)')
-            return
+            continue
           }
 
           if (pageAdded) doc.addPage('a4','landscape')
@@ -152,7 +168,6 @@ export default function AdminExport() {
           const logMap  = {}
           empLogs.forEach(l => { logMap[l.log_date] = l })
 
-          // Header
           doc.setFillColor(...DARK); doc.rect(lm,8,uw,10,'F')
           doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12)
           doc.text(`FEUILLE D'HEURES · ${co.toUpperCase()} · ${monthLabel.toUpperCase()}`, W/2, 14.5, {align:'center'})
@@ -161,7 +176,6 @@ export default function AdminExport() {
           doc.setTextColor(136,136,136); doc.setFont('helvetica','normal'); doc.setFontSize(8)
           doc.text(`Période du ${format(period.start,'dd/MM/yyyy')} au ${format(period.end,'dd/MM/yyyy')}  ·  Généré le ${genDate}`, W/2, 22.5, {align:'center'})
 
-          // Infos employé
           doc.setFillColor(...BLUE_BG); doc.rect(lm,25,uw,14,'F')
           doc.setDrawColor(...BLUE); doc.rect(lm,25,uw,14,'S')
           const cw4=uw/4
@@ -178,7 +192,6 @@ export default function AdminExport() {
             doc.setTextColor(...DARK); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.text(val,x,41)
           })
 
-          // Tableau
           const cw=[18,16,18,16,16,14,14,16,0]
           const totCW=cw.reduce((a,b)=>a+b,0); cw[8]=uw-totCW
 
@@ -279,6 +292,10 @@ export default function AdminExport() {
           const isHourly = emp.contract==='heure'
           const hDue=emp.h_due||169; const hSupp=totalNet-hDue
           const sBg=hSupp>=0?GREEN_BG:RED_BG; const sFg=hSupp>=0?GREEN:RED
+
+          const { cumulativeSupp, monthsElapsed } = await computeCumulativeBalance(emp, period.end)
+          const cumBg = cumulativeSupp>=0?GREEN_BG:RED_BG; const cumFg = cumulativeSupp>=0?GREEN:RED
+
           const cw6=uw/6
           const ri = isHourly ? [
             {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
@@ -290,10 +307,10 @@ export default function AdminExport() {
           ] : [
             {l:'TOTAL TRAVAILLÉ',v:fmtH(totalNet),bg:GREEN_BG,fg:GREEN},
             {l:'HEURES DUES',v:fmtH(hDue),bg:BLUE_BG,fg:BLUE},
-            {l:'H. SUPP.',v:(hSupp>=0?'+':'-')+fmtH(Math.abs(hSupp)),bg:sBg,fg:sFg},
+            {l:'H. SUPP. (mois)',v:(hSupp>=0?'+':'-')+fmtH(Math.abs(hSupp)),bg:sBg,fg:sFg},
             {l:'VAC. RESTANTES',v:((emp.vac_droit||20)-(emp.vac_pris||0))+' j',bg:ORANGE_BG,fg:[239,159,39]},
             {l:'JOURS TRAVAILLÉS',v:workedDays+' j',bg:[245,245,250],fg:DARK},
-            {l:'SOLDE',v:hSupp>=0?'Positif':'Negatif',bg:sBg,fg:sFg},
+            {l:`SOLDE CUMULÉ (${monthsElapsed} mois)`,v:(cumulativeSupp>=0?'+':'-')+fmtH(Math.abs(cumulativeSupp)),bg:cumBg,fg:cumFg},
           ]
           ri.forEach((item,i) => {
             const rx=lm+i*cw6
@@ -305,7 +322,6 @@ export default function AdminExport() {
 
           let secY = aty + 16
 
-          // Signatures
           const sy=secY
           doc.setFillColor(248,248,252); doc.rect(lm,sy,uw,14,'F')
           doc.setDrawColor(...GREY); doc.rect(lm,sy,uw,14,'S')
@@ -316,13 +332,11 @@ export default function AdminExport() {
             doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(sig[1],sx,sy+11,{align:'center'})
           })
 
-          // Pied
           doc.setTextColor(150,150,150); doc.setFont('helvetica','normal'); doc.setFontSize(6)
-          doc.text("Relevé établi conformément aux art. 46 LTr et 73 OLT 1. À conserver 5 ans. Les pauses de moins de 30 minutes ne sont pas mentionnées.", W/2, 202.5, {align:'center'})
+          doc.text("Relevé établi conformément aux art. 46 LTr et 73 OLT 1. À conserver 5 ans. Les pauses de moins de 30 minutes ne sont pas mentionnées. Le solde cumulé reporte les heures supplémentaires ou manquantes depuis la date d'embauche.", W/2, 202.5, {align:'center'})
           doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(6.5)
           doc.text(`Pointly · ${co} · ${monthLabel}`, W/2, 206, {align:'center'})
 
-          // Filigrane
           doc.saveGraphicsState(); doc.setGState(new doc.GState({opacity:0.03}))
           doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(55)
           doc.text('OFFICIEL', W/2, 105, {align:'center',angle:35})
@@ -330,13 +344,12 @@ export default function AdminExport() {
         } catch (empErr) {
           skipped.push(emp.full_name + ' (erreur : ' + empErr.message + ')')
         }
-      })
+      }
 
       if (!pageAdded) {
         throw new Error("Aucune feuille n'a pu être générée — vérifiez le cycle de calcul de vos employés.")
       }
 
-      // Page récap équipe
       doc.addPage('a4','landscape')
       doc.setFillColor(...DARK); doc.rect(lm,8,uw,10,'F')
       doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12)
@@ -390,7 +403,6 @@ export default function AdminExport() {
 
   function mkIni(name=''){ const p=name.trim().split(' '); return((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase() }
 
-  // Récap mensuel pour l'aperçu
   const summaries = emps.map(emp => {
     const total = allLogs.filter(l=>l.user_id===emp.id).reduce((a,l)=>a+(l.net_hours||0),0)
     const hDue  = emp.h_due||169
@@ -405,7 +417,6 @@ export default function AdminExport() {
       </div>
 
       <div className="content">
-        {/* Sélecteur mois */}
         <div className="card">
           <div className="card-title">Mois à exporter</div>
           <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
@@ -421,7 +432,6 @@ export default function AdminExport() {
           </div>
         </div>
 
-        {/* Aperçu récap */}
         {summaries.length > 0 && (
           <div className="card">
             <div className="card-title">Aperçu — {MONTHS[selMonth]} {year}</div>
@@ -453,13 +463,12 @@ export default function AdminExport() {
           </div>
         )}
 
-        {/* ── Feuille d'heures ── */}
         <div className="card" style={{borderLeft:'3px solid var(--accent)'}}>
           <div className="card-title">Feuille d'heures</div>
           <div style={{fontSize:'12px',color:'var(--text2)',lineHeight:'1.55',marginBottom:'12px'}}>
-            Une page par employé : horaires, pauses, jours de repos et totaux hebdomadaires.
-            Établie selon les art. 46 LTr et 73 OLT 1 — c'est le document à remettre à votre
-            fiduciaire ou à présenter en cas de contrôle.
+            Une page par employé : horaires, pauses, jours de repos, totaux hebdomadaires et
+            <strong> solde cumulé depuis l'embauche</strong> (report automatique des heures supp.
+            d'un mois à l'autre). Établie selon les art. 46 LTr et 73 OLT 1.
           </div>
           <button className="btn btn-p" onClick={generatePDF} disabled={generating||emps.length===0}>
             {generating
@@ -472,7 +481,6 @@ export default function AdminExport() {
           </button>
         </div>
 
-        {/* ── Rapport d'activité ── */}
         {company?.sectors_enabled && (
           <div className="card" style={{borderLeft:'3px solid var(--green)'}}>
             <div className="card-title">Rapport d'activité par secteur</div>
