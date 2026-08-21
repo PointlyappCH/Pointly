@@ -27,28 +27,46 @@ export default function EmpHome() {
   const [savingSector, setSavingSector] = useState(false)
   const [zones, setZones] = useState([])
   const [freeInput, setFreeInput] = useState(false)
+  const [depointing, setDepointing] = useState(false)
+  const [pauseLoading, setPauseLoading] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const dateLabel = format(new Date(), "EEEE d MMMM", { locale: fr })
   const firstName = profile?.full_name?.split(' ')[0] || ''
 
-  function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),2800) }
+  function showToast(msg){ setToast(msg); setTimeout(()=>setToast(''),3200) }
   function mkIni(n=''){ const p=n.trim().split(' '); return((p[0]||'').substring(0,2)+(p[1]||'').substring(0,1)).toUpperCase() }
+
+  // Message clair selon le type d'erreur — distingue une vraie coupure réseau
+  // d'une erreur serveur, pour que la personne sache si réessayer suffit.
+  function networkErrorMessage(err) {
+    if (!navigator.onLine) return '📡 Pas de connexion internet — réessaie une fois reconnecté'
+    if (err?.message?.toLowerCase().includes('fetch') || err?.message?.toLowerCase().includes('network')) {
+      return '📡 Connexion instable — réessaie dans quelques secondes'
+    }
+    return 'Erreur : ' + (err?.message || 'réessaie dans quelques secondes')
+  }
 
   async function loadLog() {
     if (!profile || !company) return
-    const [{ data: l }, { data: s }, { data: ex }] = await Promise.all([
-      supabase.from('time_logs').select('*').eq('user_id', profile.id).eq('log_date', today).maybeSingle(),
-      supabase.from('shifts').select('*').eq('user_id', profile.id).eq('shift_date', today).maybeSingle(),
-      supabase.from('exchanges').select('id').eq('target_id', profile.id).eq('status','pending'),
-    ])
-    setLog(l); setMyShift(s); setPendingExchanges((ex||[]).length)
-    if (l?.id) {
-      const { data: segs } = await supabase.from('shift_segments')
-        .select('*').eq('time_log_id', l.id).order('started_at')
-      setSegments(segs||[])
-    } else {
-      setSegments([])
+    try {
+      const [{ data: l }, { data: s }, { data: ex }] = await Promise.all([
+        supabase.from('time_logs').select('*').eq('user_id', profile.id).eq('log_date', today).maybeSingle(),
+        supabase.from('shifts').select('*').eq('user_id', profile.id).eq('shift_date', today).maybeSingle(),
+        supabase.from('exchanges').select('id').eq('target_id', profile.id).eq('status','pending'),
+      ])
+      setLog(l); setMyShift(s); setPendingExchanges((ex||[]).length)
+      if (l?.id) {
+        const { data: segs } = await supabase.from('shift_segments')
+          .select('*').eq('time_log_id', l.id).order('started_at')
+        setSegments(segs||[])
+      } else {
+        setSegments([])
+      }
+    } catch (err) {
+      // Un échec de chargement (ex: coupure au démarrage) ne doit pas bloquer l'écran —
+      // les données déjà affichées restent visibles, on peut réessayer plus tard.
+      showToast(networkErrorMessage(err))
     }
   }
 
@@ -102,8 +120,8 @@ export default function EmpHome() {
   // Modal si un code est exigé ou si un secteur peut être choisi, sinon pointage direct
   function startPunchFlow() {
     setCodeInput(''); setCodeError(''); setStartSector(''); setFreeInput(false)
-    const needCode = company?.require_daily_code !== false
-    if (!needCode && !company?.sectors_enabled) doPunchIn()
+    const nc = company?.require_daily_code !== false
+    if (!nc && !company?.sectors_enabled) doPunchIn()
     else setShowCodeModal(true)
   }
 
@@ -111,40 +129,49 @@ export default function EmpHome() {
 
   async function doPunchIn() {
     if (!profile || !company || checkingCode) return
-    const needCode = company.require_daily_code !== false
-    if (needCode) {
-      if (!codeInput.trim()) { setCodeError('Entre le code affiché sur place'); return }
-      setCheckingCode(true); setCodeError('')
-      const { data: validCode, error } = await supabase.rpc('get_or_create_today_code', { p_company_id: company.id })
-      if (error) { setCodeError('Erreur de vérification, réessaie'); setCheckingCode(false); return }
-      if (codeInput.trim() !== validCode) {
-        setCodeError('Code incorrect'); setCheckingCode(false); return
+    setCheckingCode(true); setCodeError('')
+    try {
+      const nc = company.require_daily_code !== false
+      if (nc) {
+        if (!codeInput.trim()) { setCodeError('Entre le code affiché sur place'); setCheckingCode(false); return }
+        const { data: validCode, error } = await supabase.rpc('get_or_create_today_code', { p_company_id: company.id })
+        if (error) throw error
+        if (codeInput.trim() !== validCode) {
+          setCodeError('Code incorrect'); setCheckingCode(false); return
+        }
       }
-    } else {
-      setCheckingCode(true); setCodeError('')
-    }
-    const { data: newLog, error: insErr } = await supabase.from('time_logs').upsert({
-      user_id: profile.id, company_id: company.id,
-      log_date: today, punched_in: new Date().toISOString(),
-      punched_out: null, net_hours: null, error_24h: false,
-      pause_start: null, pause_end: null,
-    }, { onConflict: 'user_id,log_date' }).select().single()
+      const { data: newLog, error: insErr } = await supabase.from('time_logs').upsert({
+        user_id: profile.id, company_id: company.id,
+        log_date: today, punched_in: new Date().toISOString(),
+        punched_out: null, net_hours: null, error_24h: false,
+        pause_start: null, pause_end: null,
+      }, { onConflict: 'user_id,log_date' }).select().single()
 
-    if (!insErr && newLog && company.sectors_enabled) {
-      const { data: resolved } = await supabase.rpc('resolve_sector', {
-        p_company_id: company.id,
-        p_name: startSector.trim() || 'Général',
-        p_mark_pending: company.sector_input_mode === 'validated',
-      })
-      await supabase.from('shift_segments').insert({
-        time_log_id: newLog.id, company_id: company.id, user_id: profile.id,
-        sector: resolved || startSector.trim() || 'Général',
-        started_at: new Date().toISOString(),
-      })
-    }
+      if (insErr) throw insErr
 
-    setCheckingCode(false); setShowCodeModal(false); setCodeInput(''); setStartSector('')
-    loadLog(); showToast('Pointé ✅')
+      if (newLog && company.sectors_enabled) {
+        const { data: resolved } = await supabase.rpc('resolve_sector', {
+          p_company_id: company.id,
+          p_name: startSector.trim() || 'Général',
+          p_mark_pending: company.sector_input_mode === 'validated',
+        })
+        await supabase.from('shift_segments').insert({
+          time_log_id: newLog.id, company_id: company.id, user_id: profile.id,
+          sector: resolved || startSector.trim() || 'Général',
+          started_at: new Date().toISOString(),
+        })
+      }
+
+      setShowCodeModal(false); setCodeInput(''); setStartSector('')
+      await loadLog()
+      showToast('Pointé ✅')
+    } catch (err) {
+      // On garde la modale ouverte : la personne voit l'erreur et peut réessayer
+      // sans perdre sa saisie (code, secteur).
+      setCodeError(networkErrorMessage(err))
+    } finally {
+      setCheckingCode(false)
+    }
   }
 
   function currentOpenSegment() {
@@ -152,60 +179,91 @@ export default function EmpHome() {
   }
 
   async function togglePause() {
-    if (!log) return
-    const now = new Date().toISOString()
-    if (isPaused) {
-      await supabase.from('time_logs').update({ pause_end: now }).eq('id', log.id)
-      if (company?.sectors_enabled) {
-        const lastSector = segments[segments.length-1]?.sector || 'Général'
-        await supabase.from('shift_segments').insert({
-          time_log_id: log.id, company_id: company.id, user_id: profile.id,
-          sector: lastSector, started_at: now,
-        })
+    if (!log || pauseLoading) return
+    setPauseLoading(true)
+    const nowIso = new Date().toISOString()
+    try {
+      if (isPaused) {
+        const { error } = await supabase.from('time_logs').update({ pause_end: nowIso }).eq('id', log.id)
+        if (error) throw error
+        if (company?.sectors_enabled) {
+          const lastSector = segments[segments.length-1]?.sector || 'Général'
+          await supabase.from('shift_segments').insert({
+            time_log_id: log.id, company_id: company.id, user_id: profile.id,
+            sector: lastSector, started_at: nowIso,
+          })
+        }
+      } else {
+        const { error } = await supabase.from('time_logs').update({ pause_start: nowIso }).eq('id', log.id)
+        if (error) throw error
+        if (company?.sectors_enabled) {
+          const open = currentOpenSegment()
+          if (open) await supabase.from('shift_segments').update({ ended_at: nowIso }).eq('id', open.id)
+        }
       }
-    } else {
-      await supabase.from('time_logs').update({ pause_start: now }).eq('id', log.id)
-      if (company?.sectors_enabled) {
-        const open = currentOpenSegment()
-        if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
-      }
+      await loadLog()
+    } catch (err) {
+      showToast(networkErrorMessage(err))
+    } finally {
+      setPauseLoading(false)
     }
-    loadLog()
   }
 
   async function changeSector() {
     if (!log || !sectorInput.trim() || savingSector) return
     setSavingSector(true)
-    const now = new Date().toISOString()
-    const { data: resolved } = await supabase.rpc('resolve_sector', {
-      p_company_id: company.id,
-      p_name: sectorInput.trim(),
-      p_mark_pending: company.sector_input_mode === 'validated',
-    })
-    const open = currentOpenSegment()
-    if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
-    await supabase.from('shift_segments').insert({
-      time_log_id: log.id, company_id: company.id, user_id: profile.id,
-      sector: resolved || sectorInput.trim(), started_at: now,
-    })
-    setSavingSector(false); setShowSectorModal(false); setSectorInput(''); setFreeInput(false)
-    loadLog(); showToast('Secteur changé ✅')
+    try {
+      const nowIso = new Date().toISOString()
+      const { data: resolved } = await supabase.rpc('resolve_sector', {
+        p_company_id: company.id,
+        p_name: sectorInput.trim(),
+        p_mark_pending: company.sector_input_mode === 'validated',
+      })
+      const open = currentOpenSegment()
+      if (open) await supabase.from('shift_segments').update({ ended_at: nowIso }).eq('id', open.id)
+      const { error } = await supabase.from('shift_segments').insert({
+        time_log_id: log.id, company_id: company.id, user_id: profile.id,
+        sector: resolved || sectorInput.trim(), started_at: nowIso,
+      })
+      if (error) throw error
+
+      setShowSectorModal(false); setSectorInput(''); setFreeInput(false)
+      await loadLog()
+      showToast('Secteur changé ✅')
+    } catch (err) {
+      // Modale laissée ouverte pour permettre de réessayer sans tout retaper.
+      showToast(networkErrorMessage(err))
+    } finally {
+      setSavingSector(false)
+    }
   }
 
   async function depoint() {
-    if (!log) return
-    const net = workedMs / 3600000
-    const now = new Date().toISOString()
-    if (company?.sectors_enabled) {
-      const open = currentOpenSegment()
-      if (open) await supabase.from('shift_segments').update({ ended_at: now }).eq('id', open.id)
+    if (!log || depointing) return
+    setDepointing(true)
+    try {
+      const net = workedMs / 3600000
+      const nowIso = new Date().toISOString()
+      if (company?.sectors_enabled) {
+        const open = currentOpenSegment()
+        if (open) await supabase.from('shift_segments').update({ ended_at: nowIso }).eq('id', open.id)
+      }
+      const { error } = await supabase.from('time_logs').update({
+        punched_out: nowIso, net_hours: net,
+        remark: remark||null, error_24h: isError,
+      }).eq('id', log.id)
+      if (error) throw error
+
+      setShowDepoint(false); setRemark('')
+      await loadLog()
+      showToast(isError ? '⚠️ Correction enregistrée' : 'Dépointé ✅')
+    } catch (err) {
+      // On ne ferme pas la modale : si le dépointage a échoué, mieux vaut que
+      // la personne le voie et réessaie plutôt que de croire que c'est fait.
+      showToast(networkErrorMessage(err))
+    } finally {
+      setDepointing(false)
     }
-    await supabase.from('time_logs').update({
-      punched_out: now, net_hours: net,
-      remark: remark||null, error_24h: isError,
-    }).eq('id', log.id)
-    setShowDepoint(false); setRemark(''); loadLog()
-    showToast(isError ? '⚠️ Correction enregistrée' : 'Dépointé ✅')
   }
 
   return (
@@ -316,9 +374,9 @@ export default function EmpHome() {
                 <i className="ti ti-player-stop"/>Dépointer
               </button>
               <div className="punch-actions">
-                <button className="punch-act" onClick={togglePause}>
+                <button className="punch-act" onClick={togglePause} disabled={pauseLoading}>
                   <i className={`ti ${isPaused?'ti-player-play':'ti-player-pause'}`}/>
-                  {isPaused?'Reprendre':'Pause'}
+                  {pauseLoading ? '…' : (isPaused?'Reprendre':'Pause')}
                 </button>
                 {company?.sectors_enabled ? (
                   <button className="punch-act" onClick={()=>{ setSectorInput(''); setShowSectorModal(true) }}>
@@ -515,7 +573,9 @@ export default function EmpHome() {
               </div>
             </div>
             <textarea className="if" rows="2" placeholder="Remarque optionnelle…" value={remark} onChange={e=>setRemark(e.target.value)} style={{marginBottom:'16px'}}/>
-            <button className="btn btn-r" onClick={depoint}><i className="ti ti-check"/>Confirmer le dépointage</button>
+            <button className="btn btn-r" onClick={depoint} disabled={depointing}>
+              <i className="ti ti-check"/>{depointing?'…':'Confirmer le dépointage'}
+            </button>
             <button className="btn btn-s" style={{marginTop:'8px'}} onClick={()=>setShowDepoint(false)}>Annuler</button>
           </div>
         </div>
